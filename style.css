@@ -1,0 +1,162 @@
+/* Wayfinding concept: the archive reads like a mall floor guide.
+   One family (BIZ UDPGothic, a universal-design face made for signage),
+   harbor blue for structure, signage yellow only for "you are here" and reveals,
+   one color per role because role is the information that matters most. */
+:root{
+  --paper:#EEF1F2; --panel:#FFFFFF; --ink:#15212B; --sub:#55636E; --line:#C9D1D6;
+  --harbor:#1C4F7A; --on-harbor:#FFFFFF; --sign:#F3C43C; --on-sign:#15212B;
+  --r-koan:#1C4F7A; --r-beppan:#2E7D50; --r-tent:#7A4FA3; --r-shinshi:#C0392B;
+  --f:"BIZ UDPGothic","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0F1820; --panel:#16222C; --ink:#E6ECEF; --sub:#9AA9B4; --line:#2A3A46;
+  --harbor:#7FB2E0; --on-harbor:#0F1820; --sign:#F3C43C; --on-sign:#15212B;
+  --r-koan:#7FB2E0; --r-beppan:#6CC291; --r-tent:#B79BE0; --r-shinshi:#F07A6B;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0F1820; --panel:#16222C; --ink:#E6ECEF; --sub:#9AA9B4; --line:#2A3A46;
+  --harbor:#7FB2E0; --on-harbor:#0F1820; --sign:#F3C43C; --on-sign:#15212B;
+  --r-koan:#7FB2E0; --r-beppan:#6CC291; --r-tent:#B79BE0; --r-shinshi:#F07A6B;
+  color-scheme:dark}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--f);font-size:16px;line-height:1.75}
+img{max-width:100%;display:block}
+a{color:var(--harbor)}
+:focus-visible{outline:3px solid var(--sign);outline-offset:2px}
+.skip{position:absolute;left:-999px}.skip:focus{left:16px;top:8px;z-index:20;background:var(--sign);color:var(--on-sign);padding:4px 10px}
+
+/* header: the directory sign */
+.bar{position:sticky;top:0;z-index:10;background:var(--harbor);color:var(--on-harbor)}
+.bar-in{max-width:960px;margin:0 auto;padding:10px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 24px}
+.brand{display:flex;align-items:center;gap:10px;color:inherit;text-decoration:none}
+.pict{width:34px;height:34px;border-radius:50%;background:var(--on-harbor);color:var(--harbor);display:grid;place-items:center;font-weight:700;font-size:21px;flex:none}
+.brand-t{display:flex;flex-direction:column;line-height:1.25}
+.brand-t b{font-size:17px;letter-spacing:.04em}
+.brand-t small{font-size:12px;opacity:.85}
+.nav{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;margin-left:auto}
+.nav a{color:inherit;text-decoration:none;font-weight:700;font-size:15px;padding:6px 12px;border-radius:4px;white-space:nowrap}
+.nav a[aria-current="page"]{background:var(--sign);color:var(--on-sign)}
+@media (max-width:640px){.nav{margin-left:0;width:calc(100% + 32px);margin-inline:-16px;padding-inline:12px}}
+
+main{max-width:960px;margin:0 auto;padding:28px 16px 40px}
+main:focus{outline:none}
+.loading{color:var(--sub)}
+h1{font-size:30px;line-height:1.35;margin:0 0 12px;letter-spacing:.02em}
+h2{font-size:22px;line-height:1.4;margin:40px 0 12px}
+h3{font-size:17px;margin:24px 0 6px}
+p{margin:0 0 12px;max-width:40em}
+.lead{font-size:18px;max-width:34em}
+.sub{color:var(--sub);font-size:14px}
+
+/* term switcher: floor buttons */
+.floors{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 20px}
+.floors a{display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--ink);border:2px solid var(--line);border-radius:6px;padding:6px 14px 6px 6px;font-weight:700;background:var(--panel)}
+.floors a .n{width:28px;height:28px;border-radius:4px;background:var(--line);display:grid;place-items:center;color:var(--ink)}
+.floors a[aria-current="page"]{border-color:var(--harbor)}
+.floors a[aria-current="page"] .n{background:var(--harbor);color:var(--on-harbor)}
+
+/* home: the three malls as a directory board */
+.board{border:2px solid var(--harbor);border-radius:8px;overflow:hidden;background:var(--panel);margin:20px 0}
+.board a{display:grid;grid-template-columns:64px 1fr auto;align-items:center;gap:14px;padding:14px 16px;color:var(--ink);text-decoration:none;border-top:1px solid var(--line)}
+.board a:first-child{border-top:0}
+.board .fl{font-size:34px;font-weight:700;color:var(--harbor);line-height:1}
+.board .nm{font-weight:700;font-size:18px}
+.board .tm{color:var(--sub);font-size:14px;font-variant-numeric:tabular-nums}
+.board .go{font-size:14px;color:var(--harbor);font-weight:700}
+.board a:hover{background:color-mix(in srgb,var(--harbor) 7%,transparent)}
+@media (max-width:560px){.board a{grid-template-columns:44px 1fr}.board .go{display:none}.board .fl{font-size:26px}}
+
+.roles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0}
+.role{background:var(--panel);border-left:6px solid var(--rc);padding:12px 14px;border-radius:0 6px 6px 0}
+.role b{color:var(--rc);font-size:18px}
+.role p{margin:4px 0 0;font-size:14px}
+
+.podium{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0;max-width:640px}
+.podium>div{background:var(--panel);border-radius:6px;padding:14px;text-align:center;border:1px solid var(--line)}
+.podium .rk{font-size:13px;color:var(--sub)}
+.podium .nm{font-size:20px;font-weight:700}
+.podium .pt{font-size:28px;font-weight:700;color:var(--harbor);font-variant-numeric:tabular-nums}
+.podium>div:first-child{border:2px solid var(--sign);background:color-mix(in srgb,var(--sign) 16%,var(--panel))}
+
+/* role chips */
+.chip{display:inline-block;font-size:13px;font-weight:700;padding:1px 8px;border-radius:3px;color:#fff;background:var(--rc);white-space:nowrap}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .chip{color:#0F1820}}
+:root[data-theme="dark"] .chip{color:#0F1820}
+.r-公安{--rc:var(--r-koan)} .r-密使{--rc:var(--r-beppan)} .r-蜃気楼{--rc:var(--r-tent)} .r-内通者{--rc:var(--r-shinshi)}
+.chip.none{background:var(--line);color:var(--sub)}
+
+/* tables */
+.tw{overflow-x:auto;margin:8px 0 16px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:13px;color:var(--sub);font-weight:700;background:color-mix(in srgb,var(--line) 35%,var(--panel))}
+tr:last-child td{border-bottom:0}
+th{white-space:nowrap}
+td b{white-space:nowrap}
+.tw table{min-width:560px}
+.tw.ck table{min-width:0}
+td .cell{display:flex;align-items:center;gap:6px;white-space:nowrap}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+td.total{font-weight:700;font-size:17px}
+tr.first td{background:color-mix(in srgb,var(--sign) 18%,var(--panel))}
+
+/* missions */
+.ms{list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.ms li{display:grid;grid-template-columns:44px 1fr;gap:12px;background:var(--panel);border-radius:6px;padding:14px;border:1px solid var(--line)}
+.ms .no{font-size:22px;font-weight:700;color:var(--harbor);text-align:center;line-height:1.2}
+.ms .tt{font-weight:700}
+.ms .od{margin:4px 0}
+.ms .cd{font-size:14px;color:var(--sub)}
+.ms .cd b{color:var(--ink)}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.tag{font-size:12px;border:1px solid var(--line);border-radius:3px;padding:0 6px;color:var(--sub)}
+
+/* answers: the reveal */
+.ans{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:800px){.ans{grid-template-columns:1fr}}
+.ph{position:relative;border-radius:8px;overflow:hidden;background:var(--harbor);aspect-ratio:4/3}
+.ph img{width:100%;height:100%;object-fit:cover;filter:blur(28px) saturate(.6);transform:scale(1.15);transition:filter .7s ease,transform .7s ease}
+.ph.open img{filter:none;transform:none}
+.ph .cover{position:absolute;inset:0;display:grid;place-items:center;align-content:center;gap:12px;color:#fff;text-align:center;padding:16px;background:rgba(15,24,32,.35)}
+.ph.open .cover{display:none}
+.ph .cover .pict{width:64px;height:64px;font-size:40px;background:#fff;color:#1C4F7A}
+@media (prefers-reduced-motion:reduce){.ph img{transition:none}}
+.btn{font:inherit;font-weight:700;font-size:15px;border:2px solid var(--harbor);background:var(--harbor);color:var(--on-harbor);border-radius:6px;padding:8px 16px;cursor:pointer}
+.btn.ghost{background:transparent;color:var(--harbor)}
+.btn.sign{background:var(--sign);border-color:var(--sign);color:var(--on-sign)}
+.btn[disabled]{opacity:.45;cursor:default}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.clues{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:6px}
+.clues li{display:grid;grid-template-columns:30px 1fr;gap:10px;padding:8px 10px;background:var(--panel);border-radius:6px;border:1px solid var(--line)}
+.clues li .k{font-size:12px;color:var(--sub);display:block}
+.clues li .i{font-weight:700;color:var(--harbor);font-variant-numeric:tabular-nums;text-align:right}
+.clues li.hid{color:var(--sub)}
+.clues li.new{border-color:var(--sign);box-shadow:inset 4px 0 0 var(--sign)}
+.where{background:var(--panel);border-left:6px solid var(--sign);padding:12px 14px;border-radius:0 6px 6px 0;margin:12px 0}
+.ck td:first-child{width:36px;color:var(--sub)}
+.mk{font-size:12px;font-weight:700;color:var(--r-beppan);white-space:nowrap}
+
+/* GM handbook timeline */
+.tl{list-style:none;padding:0;margin:0;display:grid;gap:12px}
+.tl>li{display:grid;grid-template-columns:96px 1fr;gap:14px}
+.tl .when{font-weight:700;color:var(--harbor);font-variant-numeric:tabular-nums;padding-top:12px;text-align:right;font-size:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:12px 14px;min-width:0}
+.card h3{margin:0;font-size:17px}
+.to{font-size:13px;color:var(--sub)}
+.place{font-size:14px;margin-top:4px}
+.pw{display:inline-block;border:2px solid var(--r-shinshi);color:var(--r-shinshi);font-weight:700;padding:0 8px;border-radius:4px;margin-left:6px}
+details.m{border-top:1px dashed var(--line);margin-top:8px;padding-top:8px}
+details.m summary{cursor:pointer;font-weight:700;font-size:15px}
+pre{white-space:pre-wrap;word-break:break-word;font:inherit;font-size:14px;background:var(--paper);padding:10px;border-radius:6px;margin:8px 0 0}
+.card .shot{margin-top:10px;border-radius:6px;overflow:hidden}
+@media (max-width:560px){.tl>li{grid-template-columns:1fr;gap:4px}.tl .when{text-align:left;padding-top:0}}
+
+.rules section{max-width:44em}
+.rules ul{padding-left:1.2em;margin:0 0 12px}
+.rules li{margin:2px 0}
+
+.foot{max-width:960px;margin:0 auto;padding:20px 16px 40px;color:var(--sub);font-size:13px;border-top:1px solid var(--line)}
+.foot p{margin:0 0 4px;max-width:none}
