@@ -18,6 +18,17 @@ const GM = demo.gm;
 let g = await st(GM);
 ok(g.players.length === 16 && g.game.phase === 'setup', 'デモのゲームができる（16人、準備中）');
 ok((await act(GM, 'phase', { to: 'action' })).status === 400, '順番を飛ばして進められない');
+// 予定：ターム1の行動開始を 11:40 にすると、内通者の1回目の接触は 11:48〜11:53
+ok((await act(GM, 'plan', { date: '2026-11-03', start: { 1: '11:40', 2: '14:15', 3: '9:5x' } })).status === 400, '時刻の形が違うと断られる');
+await act(GM, 'plan', { date: '2026-11-03', start: { 1: '11:40', 2: '14:15', 3: '16:20' } });
+g = await st(GM);
+const sch = g.schedule[0], cs1 = sch.contacts.find(x => x.role === '内通者' && x.n === 1);
+const jst = ms => new Date(ms + 9 * 3600000).toISOString().slice(11, 16);
+// デモは行動が短いので、接触の時刻も比例して縮む（本番の60分なら 11:48〜11:53）
+const k = g.game.dur.action / 60, base = Date.parse('2026-11-03T11:40:00+09:00');
+const want = m => base + Math.round(m * k * 60000);
+ok(jst(sch.start) === '11:40' && cs1.from === want(8) && cs1.to === want(13), `予定から接触の時刻が決まる（${jst(cs1.from)}〜${jst(cs1.to)}）`);
+ok(jst(g.schedule[2].start) === '16:20' && g.game.plan.start[3] === '16:20', 'ターム3の予定も入る');
 await act(GM, 'phase', { to: 'brief' }); await act(GM, 'phase', { to: 'action' });
 g = await st(GM);
 const R = g.roles[1], tok = Object.fromEntries(g.players.map(p => [p.id, p.tok])), nm = Object.fromEntries(g.players.map(p => [p.id, p.name]));
@@ -53,6 +64,7 @@ ok((await act(GM, 'contact', { role: '内通者', slot: 1, player: bA })).status
 await act(GM, 'contact', { role: '内通者', slot: 1, player: sA });
 let ps = await st(tok[sA]); ok(ps.rights === 1 && ps.contact.slots[0].done, '内通者の接触で妨害の権利が1つ');
 ok(ps.answer && (await api('GET', `answer?k=${tok[sA]}`)).status === 200, '内通者は答えの写真を見られる');
+ok(ps.contact.slots[0].from === want(8), '内通者のページにも予定の時刻で出る（実際に始めた時刻ではなく）');
 ok((await api('GET', `answer?k=${tok[a1]}`)).status === 403, '公安は答えの写真を見られない');
 await act(GM, 'contact', { role: '密使', slot: 1, player: bA });
 const pbA = await st(tok[bA]); ok(pbA.inbox.some(m => m.kind === 'contact' && who('A', '公安').some(id => m.body.includes(nm[id]))), '密使に自分のチームの公安の名前が届く');

@@ -98,6 +98,12 @@ G.clockHTML = (game) => {
   if (ph === 'action' && game.action_at) end = game.action_at + d.action * 60000;
   if (ph === 'meeting' && game.phase_at) end = game.phase_at + d.meeting * 60000;
   if (ph === 'vote' && game.phase_at) end = game.phase_at + d.vote * 60000;
+  // 始まる前は、行動開始の予定までを数える（1時間より先なら時刻だけ出す）
+  const nextT = ph === 'setup' ? 1 : ph === 'brief' ? game.term : null, at = nextT && game.plan?.at?.[nextT];
+  if (end == null && at && at > G.now()) {
+    if (at - G.now() > 3600000) { const d = new Date(at), today = new Date(G.now()).toDateString() === d.toDateString(); return `<div class="clock"><span class="ph">ターム${nextT}の開始</span><span class="tm" style="font-size:18px">${today ? '' : `${d.getMonth() + 1}/${d.getDate()} `}${G.hm(at)}</span></div>`; }
+    return `<div class="clock" data-end="${at}"><span class="ph">ターム${nextT}の開始まで</span><span class="tm">${G.mmss(at - G.now())}</span></div>`;
+  }
   if (end == null) return `<div class="clock"><span class="ph">${G.PHASE[ph]}</span><span class="tm" style="font-size:16px">${game.term ? `ターム${game.term}` : ''}</span></div>`;
   const left = end - G.now();
   return `<div class="clock${left < 5 * 60000 ? ' low' : ''}" data-end="${end}"><span class="ph">${G.PHASE[ph]}・のこり</span><span class="tm">${G.mmss(left)}</span></div>`;

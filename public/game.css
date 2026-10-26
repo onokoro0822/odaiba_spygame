@@ -147,7 +147,7 @@ tr.me td{box-shadow:inset 4px 0 0 var(--harbor)}
 
 /* フォーム */
 label.f{display:block;font-weight:700;margin:12px 0 4px}
-select,input[type=text],input[type=password],textarea{font:inherit;font-size:16px;width:100%;padding:10px 12px;border:2px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
+select,input[type=text],input[type=password],input[type=date],input[type=time],textarea{font:inherit;font-size:16px;width:100%;padding:10px 12px;border:2px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
 select:focus,input:focus,textarea:focus{border-color:var(--harbor);outline:none}
 textarea{min-height:200px}
 .checks{list-style:none;margin:0;padding:0;display:grid;gap:4px}

@@ -38,12 +38,12 @@ function alerts() {
 }
 function now() {
   const g = S.game;
-  if (g.phase === 'setup') return `<h1>まもなく始まります</h1><div class="card"><p>あなたのコードネームは <b>${esc(S.me.name)}</b> です。</p><p>GMの合図でターム1が始まると、この画面にチームと役職が出ます。このページはあなた専用です。URLは人に見せないでください。</p></div>${howto()}`;
+  if (g.phase === 'setup') return `<h1>まもなく始まります</h1><div class="card"><p>あなたのコードネームは <b>${esc(S.me.name)}</b> です。</p><p>GMの合図でターム1が始まると、この画面にチームと役職が出ます。このページはあなた専用です。URLは人に見せないでください。</p></div>${schedule()}${howto()}`;
   if (S.rest) return `<h1>このタームはお休みです</h1><p>次のタームを待ってください。</p>`;
   if (g.phase === 'end') return `<h1>おつかれさまでした</h1>${totals()}`;
   if (g.phase === 'result') return termResult(S.res.terms.find(r => r.t === g.term), true);
   const mates = `<div class="card"><div class="hd">${teamChip(S.team)}<span class="sub">${S.mates.length}人</span></div><p style="margin:0">${S.mates.map(m => m.id === S.me.id ? `<b>${esc(m.name)}</b>（あなた）` : esc(m.name)).join('、')}</p></div>`;
-  if (g.phase === 'brief') return `<h1>ターム${g.term}　${esc(S.mall)}</h1>${roleCard()}${mates}<div class="notice">GMの合図で行動が始まります。役職の画面で、任務と点数を確かめておいてください。</div>`;
+  if (g.phase === 'brief') { const at = g.plan?.at?.[g.term]; return `<h1>ターム${g.term}　${esc(S.mall)}</h1>${roleCard()}${mates}<div class="notice">${at ? `行動開始は <b>${G.hm(at)}</b> の予定です。` : ''}GMの合図で行動が始まります。役職の画面で、任務と点数を確かめておいてください。</div>`; }
   if (g.phase === 'meeting' || g.phase === 'vote') return `${voteForm()}${mates}`;
   // 行動中
   const open = S.odai.filter(o => o.state === 'open'), taken = S.odai.filter(o => o.state === 'taken');
@@ -64,6 +64,13 @@ function now() {
     : `<div class="card"><p>答えの写真にできるだけ近い1枚を、<b>チームで1回だけ</b>出せます。撮る場所はチームで話し合って決めてください。</p><button class="btn sign wide" type="button" data-up="kakuho">確保写真を撮って出す</button></div>`}`;
   if (taken.length) h += `<h2>獲得されたお題</h2>${taken.map(o => `<div class="card od taken"><div class="no">${o.no}</div><div><div class="tt">${esc(o.title)}</div><div class="row" style="margin-top:4px">${teamChip(o.team)}${o.team === S.team ? '<span class="sub">あなたのチーム</span>' : ''}</div></div></div>`).join('')}`;
   return h + mates;
+}
+// 開催日と、タームごとの行動開始の予定
+function schedule() {
+  const p = S.game.plan;
+  if (!p?.date && !Object.keys(p?.start || {}).length) return '';
+  const d = p.date ? new Date(p.date + 'T00:00:00+09:00') : null;
+  return `<h2>予定</h2><div class="card">${d ? `<p><b>${d.getMonth() + 1}月${d.getDate()}日（${'日月火水木金土'[d.getDay()]}）</b>　<span class="sub">各タームの行動開始の時刻</span></p>` : ''}<div class="tw narrow" style="margin:0"><table><tbody>${S.game.malls.map((m, i) => `<tr><td style="white-space:nowrap">ターム${i + 1}</td><td>${esc(m)}</td><td class="num" style="white-space:nowrap"><b>${p.at?.[i + 1] ? G.hm(p.at[i + 1]) : '－'}</b></td></tr>`).join('')}</tbody></table></div></div>`;
 }
 function howto() {
   return `<h2>遊び方</h2><div class="card"><ol style="margin:0;padding-left:1.2em">

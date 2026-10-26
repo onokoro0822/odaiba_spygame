@@ -26,9 +26,17 @@ export const content = C;
 export const termOf = t => C.terms[t - 1];
 const opts = g => JSON.parse(g.opts || '{}');
 export function durations(g) { return { ...C.durations, ...(opts(g).dur || {}) }; }
-// 接触の時刻は「行動開始から何分後」で持っている。行動の長さが違うゲームでは比例で縮める
-function slotTimes(g, slot) {
-  const k = durations(g).action / 60, base = g.action_at;
+// GMが入れた、タームごとの行動開始の予定（開催日＋時刻、日本時間）
+export function planStart(g, t) {
+  const o = opts(g), hm = o.start?.[t];
+  if (!o.date || !hm) return null;
+  const ms = Date.parse(`${o.date}T${hm}:00+09:00`);
+  return Number.isNaN(ms) ? null : ms;
+}
+// 接触の時刻は「行動開始から何分後」で持っている。行動の長さが違うゲームでは比例で縮める。
+// 開始の予定が入っていればその時刻から、なければ実際に行動を始めた時刻から数える
+function slotTimes(g, slot, t = g.term) {
+  const k = durations(g).action / 60, base = planStart(g, t) ?? (t === g.term ? g.action_at : null);
   return { from: base == null ? null : base + Math.round(slot.from * k * MIN), to: base == null ? null : base + Math.round(slot.to * k * MIN), fromMin: Math.round(slot.from * k), toMin: Math.round(slot.to * k) };
 }
 function actionEnd(g) { return g.action_at == null ? null : g.action_at + durations(g).action * MIN; }
@@ -159,13 +167,29 @@ export async function playerState(env, g, p) {
   }
   return s;
 }
-function gameInfo(g) { return { id: g.id, title: g.title, term: g.term, terms: C.terms.length, phase: g.phase, phase_at: g.phase_at, action_at: g.action_at, dur: durations(g), demo: !!g.demo, mall: g.term ? termOf(g.term).mall : null }; }
+function gameInfo(g) {
+  const o = opts(g);
+  return { id: g.id, title: g.title, term: g.term, terms: C.terms.length, phase: g.phase, phase_at: g.phase_at, action_at: g.action_at, dur: durations(g), demo: !!g.demo, mall: g.term ? termOf(g.term).mall : null,
+    plan: { date: o.date || '', start: o.start || {}, at: Object.fromEntries(C.terms.map(T => [T.t, planStart(g, T.t)])) }, malls: C.terms.map(T => T.mall) };
+}
+
+// 開催日と、タームごとの行動開始の予定を入れる
+export async function setPlan(env, g, date, start) {
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Bad('開催日の形が違います');
+  const st2 = {};
+  for (const T of C.terms) { const v = start?.[T.t]; if (!v) continue; if (!/^\d{1,2}:\d{2}$/.test(v)) throw new Bad(`ターム${T.t}の時刻の形が違います`); st2[T.t] = v.padStart(5, '0'); }
+  const o = { ...opts(g), date: date || '', start: st2 };
+  await env.DB.batch([st(env, 'UPDATE games SET opts = ?, ver = ver + 1 WHERE id = ?', JSON.stringify(o), g.id)]);
+}
 
 // ---------- 画面に返す状態（GM） ----------
 export async function gmState(env, g) {
   const L = await load(env, g), t = g.term;
   const s = { v: g.ver, now: now(), gm: true, game: gameInfo(g), players: L.players.map(p => ({ id: p.id, name: p.name, tok: p.tok, bot: !!p.bot })), roles: L.R };
   s.res = await results(env, g, L);
+  // 3ターム分の予定表（行動開始と接触の時刻）
+  s.schedule = C.terms.map(T => ({ t: T.t, mall: T.mall, start: planStart(g, T.t) ?? (T.t === t ? g.action_at : null),
+    contacts: Object.entries(T.contacts).flatMap(([role, c]) => c.slots.map(x => ({ role, n: x.n, place: x.place, pw: c.pw, ...slotTimes(g, x, T.t) }))).sort((a, b) => a.fromMin - b.fromMin) }));
   if (t === 0) return s;
   const T = termOf(t);
   const [od, subs, sab, H, kak, votes, con, rights] = await Promise.all([

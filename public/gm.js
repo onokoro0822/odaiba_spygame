@@ -1,7 +1,7 @@
 // GM手帳（/gm/<鍵>）
 (() => {
 const { esc, $, chip, team: teamChip } = G;
-let S = null, tab = G.store.get('gtab:' + G.key, 'judge');
+let S = null, tab = G.store.get('gtab:' + G.key, 'flow');
 const NEXT = {
   setup: () => ['brief', 'ターム1の役職を発表する', 'チームと役職が全員の個人ページに出ます。'],
   brief: () => ['action', `行動を開始する（${S.game.dur.action}分）`, 'お題が3つ公開され、時間が動き出します。'],
@@ -15,7 +15,7 @@ const NG = ['条件が写っていない', '場所が違う', 'ぶれて見え�
 
 function tabs() {
   const pend = (S.subs || []).filter(x => x.state === 'pending' && x.kind !== 'kakuho').length;
-  const L = [['judge', '判定', pend], ['contact', '接触'], ['odai', 'お題'], ['sab', '妨害・張り込み'], ['kakuho', '確保の採点'], ['people', '参加者'], ['res', '結果']];
+  const L = [['flow', '進行'], ['judge', '判定', pend], ['contact', '接触'], ['odai', 'お題'], ['sab', '妨害・張り込み'], ['kakuho', '確保の採点'], ['people', '参加者'], ['res', '結果']];
   return L.map(([id, l, n]) => `<button type="button" data-tab="${id}"${id === tab ? ' aria-current="page"' : ''}>${l}${n ? `<span class="badge">${n}</span>` : ''}</button>`).join('');
 }
 function render() {
@@ -25,7 +25,7 @@ function render() {
   G.patch($('#bar'), `<span class="pict" aria-hidden="true">?</span><span class="bar-t"><b>GM手帳</b><small>${esc(g.title)}${g.term ? `　ターム${g.term}／${g.terms} ${esc(g.mall)}` : ''}</small></span>${G.clockHTML(g)}`);
   G.patch($('#demo'), g.demo ? `<div class="demo-bar">デモのGM手帳です。参加者の写真はコンピューターが出しています。</div>` : '');
   G.patch($('#tabs'), tabs());
-  const f = { judge, contact, odai, sab, kakuho, people, res }[tab] || judge;
+  const f = { flow, judge, contact, odai, sab, kakuho, people, res }[tab] || flow;
   const y = window.scrollY;
   G.patch($('#main'), step() + f());
   window.scrollTo(0, y);
@@ -40,8 +40,66 @@ function step() {
     if (nv) warn.push(`未投票 ${nv}人`);
   }
   if (S.game.phase === 'action') { const p = S.subs.filter(x => x.state === 'pending' && x.kind !== 'kakuho').length; if (p) warn.push(`判定待ちが ${p}件 あります`); }
+  const nx = nextContact();
+  if (nx && (S.game.phase === 'brief' || S.game.phase === 'action')) warn.push(`次の接触 ${G.hm(nx.from)}〜${G.hm(nx.to)}　${nx.role}・${nx.n}回目　${nx.place}`);
   return `<div class="card" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between"><div><div class="sub">いま：${G.PHASE[S.game.phase]}${S.game.term ? `（ターム${S.game.term}）` : ''}</div>${warn.map(w => `<div style="color:var(--ng);font-size:14px;font-weight:700">${esc(w)}</div>`).join('')}${n?.[2] ? `<div class="sub">${esc(n[2])}</div>` : ''}</div>
   ${n ? `<button class="btn sign" type="button" data-phase="${n[0]}" data-label="${esc(n[1])}">${esc(n[1])} →</button>` : '<span class="sub">ゲームは終わりました</span>'}</div>`;
+}
+
+// ---------- 進行 ----------
+// これから来る接触（いま待っている枠を含む）
+function nextContact() {
+  const cur = S.schedule?.find(x => x.t === S.game.term);
+  if (!cur) return null;
+  return cur.contacts.find(x => x.to && x.to > G.now()) || null;
+}
+const STEPS = [['brief', '役職発表'], ['action', '行動'], ['meeting', '作戦会議'], ['vote', '投票'], ['result', '結果発表']];
+function todo() {
+  const g = S.game, ph = g.phase, link = (t, l) => `<button class="btn ghost small" type="button" data-tab="${t}">${l}</button>`;
+  const planned = !!(g.plan.date && Object.keys(g.plan.start).length === g.terms);
+  const pend = (S.subs || []).filter(x => x.state === 'pending' && x.kind !== 'kakuho').length;
+  const cur = S.roles[g.term] || {}, nv = Object.values(cur).filter(r => r.role && !S.voted?.includes(r.player)).length;
+  const unscored = (S.kakuho || []).filter(k => k.sub && k.score == null).length;
+  const nx = nextContact();
+  const L = {
+    setup: [[planned, '開催日と、各タームの行動開始の時刻を入れる（このページの下の「予定」）。接触の時刻はここから自動で決まります。'],
+      [false, `「参加者」で、全員に個人ページのURLを送る。 ${link('people', '参加者を開く')}`],
+      [false, '全員がページを開けたら、上の「ターム1の役職を発表する」を押す。']],
+    brief: [[true, '全員の個人ページに、チームと役職が届きました。内通者・密使・蜃気楼には、接触の時間・場所・合言葉も届いています。'],
+      [false, 'チームごとに集まってもらい、行動開始の時刻になったら上の「行動を開始する」を押す。']],
+    action: [[!pend, `「判定」に届く写真を、上から順に「獲得」か「却下」にする${pend ? `（いま ${pend}件）` : ''}。 ${link('judge', '判定を開く')}`],
+      [false, `接触の時刻に、その場所で待つ。合言葉を言えた人の名前を「接触」で押す${nx ? `（次は ${G.hm(nx.from)} ${esc(nx.place)}）` : ''}。 ${link('contact', '接触を開く')}`],
+      [false, '妨害が出ると、緊急任務の写真も「判定」に届きます。'],
+      [false, '時間になったら、上の「行動を終えて作戦会議へ」を押す。']],
+    meeting: [[!unscored, `「確保の採点」で、各チームの確保写真を20項目でチェックする${unscored ? `（未採点 ${unscored}チーム）` : ''}。 ${link('kakuho', '採点を開く')}`],
+      [!nv, `参加者は会議しながら投票できます${nv ? `（未投票 ${nv}人）` : ''}。`],
+      [false, '会議の時間が終わったら、上の「投票の時間へ」を押す。']],
+    vote: [[!nv, `まだ投票していない人に声をかける${nv ? `（未投票 ${nv}人）` : ''}。 ${link('people', '参加者を開く')}`],
+      [!unscored, '確保の採点を全部終わらせる。'],
+      [false, '上の「結果を発表する」を押す。']],
+    result: [[true, '全員の画面に、正体・点数・答えの写真が出ました。答えの場所を口で説明すると盛り上がります。'],
+      [false, g.term < g.terms ? `次のモールへ移動して、上の「ターム${g.term + 1}の役職を発表する」を押す。` : '上の「ゲームを終える」を押すと、合計点とMVPが出ます。']],
+    end: [[true, 'おつかれさまでした。合計点は「結果」にあります。']],
+  }[ph] || [];
+  return `<ol class="checks" style="gap:8px">${L.map(([done, text]) => `<li style="display:grid;grid-template-columns:24px 1fr;gap:8px;align-items:start"><span aria-hidden="true" style="color:${done ? 'var(--ok)' : 'var(--sub)'};font-weight:700">${done ? '✓' : '・'}</span><span>${text}</span></li>`).join('')}</ol>`;
+}
+function flow() {
+  const g = S.game, idx = STEPS.findIndex(x => x[0] === g.phase);
+  let h = `<h1>進行${g.term ? ` <span class="sub">ターム${g.term}　${esc(g.mall)}</span>` : ''}</h1>`;
+  if (g.term) h += `<ol class="row" style="list-style:none;padding:0;margin:0 0 12px;gap:4px">${STEPS.map(([id, l], i) => `<li class="st ${i < idx ? 'ok' : i === idx ? '' : 'pending'}" style="${i === idx ? 'background:var(--sign);color:var(--on-sign);border-color:var(--sign);' : ''}font-size:13px;padding:2px 10px">${i < idx ? '✓ ' : ''}${l}</li>`).join('<li aria-hidden="true" class="sub">→</li>')}</ol>`;
+  h += `<div class="card hl"><h3>いまやること</h3>${todo()}</div>`;
+  h += plan();
+  return h;
+}
+function plan() {
+  const g = S.game, p = g.plan;
+  let h = `<h2>予定</h2><form class="card" id="plan"><p class="sub" style="margin:0 0 8px">行動開始の時刻を入れると、接触の時刻（行動開始の何分後か）が決まり、内通者・密使・蜃気楼のページにも時刻で出ます。入れないときは、実際に「行動を開始する」を押した時刻から数えます。</p>
+  <label class="f" for="p-date">開催日</label><input type="date" id="p-date" name="date" value="${esc(p.date)}" style="max-width:220px">
+  <div class="grid2" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-top:4px">${g.malls.map((m, i) => `<div><label class="f" for="p-${i + 1}">ターム${i + 1} 行動開始<br><span class="sub" style="font-weight:400">${esc(m)}</span></label><input type="time" id="p-${i + 1}" name="t${i + 1}" value="${esc(p.start[i + 1] || '')}"${i + 1 < g.term || (i + 1 === g.term && g.phase !== 'brief') ? ' disabled' : ''}></div>`).join('')}</div>
+  <div class="row end" style="margin-top:12px"><button class="btn" type="submit">予定を保存</button></div></form>`;
+  h += `<h2>予定表</h2>${(S.schedule || []).map(T => `<div class="card"><div class="hd"><b>ターム${T.t}</b><span>${esc(T.mall)}</span>${T.start ? `<span class="num" style="font-weight:700;color:var(--harbor)">行動 ${G.hm(T.start)}〜${G.hm(T.start + g.dur.action * 60000)}</span>` : '<span class="sub">開始時刻はまだ</span>'}</div>
+    <div class="tw narrow" style="margin:0"><table><tbody>${T.contacts.map(x => `<tr><td class="num" style="white-space:nowrap;font-weight:700">${x.from ? `${G.hm(x.from)}〜${G.hm(x.to)}` : `${x.fromMin}〜${x.toMin}分後`}</td><td>${G.chip(x.role)} ${x.n}回目</td><td>${esc(x.place)}</td><td><span class="pw" style="font-size:14px">${esc(x.pw)}</span></td></tr>`).join('')}</tbody></table></div></div>`).join('')}`;
+  return h;
 }
 
 // ---------- 判定 ----------
@@ -182,6 +240,14 @@ document.addEventListener('change', e => {
   if (f) { const set = new Set([...f.querySelectorAll('input:checked')].map(i => Number(i.value))); draft[f.dataset.kakuho] = set; f.querySelector('[data-count]').textContent = `${set.size}点`; }
 });
 document.addEventListener('submit', e => {
+  if (e.target.id === 'plan') {
+    e.preventDefault();
+    const fd = new FormData(e.target), start = {};
+    // 入れられない（始まった）タームは今の値のまま送る
+    for (let t = 1; t <= S.game.terms; t++) { const v = fd.get('t' + t) ?? S.game.plan.start[t]; if (v) start[t] = v; }
+    run(() => G.act('plan', { date: fd.get('date'), start }), '予定を保存しました');
+    return;
+  }
   const f = e.target.closest('form[data-kakuho]'); if (!f) return;
   e.preventDefault();
   const team = f.dataset.kakuho, checks = [...f.querySelectorAll('input:checked')].map(i => Number(i.value));
@@ -191,7 +257,7 @@ document.addEventListener('submit', e => {
 G.poll(d => {
   S = d;
   // 採点の途中や選択中は画面を描き直さない
-  if (document.activeElement?.closest?.('form[data-kakuho], select')) return;
+  if (document.activeElement?.closest?.('form[data-kakuho], form#plan, select')) return;
   render();
 }, 3000);
 // 接触の「いまの時間です」など、時刻で変わる表示のために時々描き直す
