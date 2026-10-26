@@ -45,8 +45,10 @@ const routes = {
     const { g, gm, gmNow } = await E.who(env, url.searchParams.get('k'));
     if (!gm && !gmNow) throw new E.Bad('見られません', 403);
     const o = E.termOf(g, Number(url.searchParams.get('t')) || g.term)?.odai.find(x => x.no === Number(url.searchParams.get('no')));
-    if (!o?.sample) throw new E.Bad('見本の写真はありません', 404);
-    const res = await env.ASSETS.fetch(new URL('/_secret/sample/' + o.sample, request.url));
+    // デモでは本物の下見写真は出さず、作り物の写真（scripts/gen_demo_photos.py）を使う
+    const file = g.demo ? o?.demo && '/_secret/demo/' + o.demo : o?.sample && '/_secret/sample/' + o.sample;
+    if (!file) throw new E.Bad('見本の写真はありません', 404);
+    const res = await env.ASSETS.fetch(new URL(file, request.url));
     if (!res.ok) throw new E.Bad('見本の写真はありません', 404);
     return new Response(res.body, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400' } });
   },

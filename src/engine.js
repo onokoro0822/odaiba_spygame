@@ -244,7 +244,7 @@ export async function gmState(env, g, by = null) {
     all(env, 'SELECT role, slot, player FROM contacts WHERE game = ? AND term = ?', g.id, t),
     all(env, 'SELECT player, source, used_at FROM rights WHERE game = ? AND term = ?', g.id, t),
   ]);
-  const odaiInfo = no => { const o = T.odai.find(x => x.no === no); return o ? { no, title: o.title, order: o.order, cond: o.cond, sample: !!o.sample } : null; };
+  const odaiInfo = no => { const o = T.odai.find(x => x.no === no); return o ? { no, title: o.title, order: o.order, cond: o.cond, sample: !!(g.demo ? o.demo : o.sample) } : null; };
   s.term = { t, mall: T.mall, answer: T.answer, checks: T.checks, bep: T.bep, floors: T.floors, actionEnd: actionEnd(g) };
   s.odai = od.map(o => ({ ...odaiInfo(o.no), state: o.state, team: o.team, ord: o.ord })).sort((a, b) => a.no - b.no);
   s.subs = subs.map(x => ({ ...x, name: L.name[x.player],

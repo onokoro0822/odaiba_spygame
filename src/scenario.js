@@ -11,7 +11,7 @@ export function cleanScenario(d, base) {
     harikomiActions: (d.harikomiActions || []).map(x => str(x, 60)).filter(Boolean),
     terms: d.terms.map((T, i) => {
       const t = i + 1, where = `ターム${t}`;
-      const odai = (T.odai || []).map((o, j) => ({ no: j + 1, title: str(o.title, 60) || '調査写真の撮影', order: str(o.order), cond: str(o.cond, 500), tags: (o.tags || []).map(x => str(x, 30)).filter(Boolean), ...(o.sample ? { sample: str(o.sample, 80) } : {}) }));
+      const odai = (T.odai || []).map((o, j) => ({ no: j + 1, title: str(o.title, 60) || '調査写真の撮影', order: str(o.order), cond: str(o.cond, 500), tags: (o.tags || []).map(x => str(x, 30)).filter(Boolean), ...(o.sample ? { sample: str(o.sample, 80) } : {}), ...(o.demo ? { demo: str(o.demo, 80) } : {}) }));
       if (odai.length < (base.openCount || 3)) bad.push(`${where}：お題が${odai.length}個です（${base.openCount || 3}個以上）`);
       odai.forEach(o => { if (!o.order) bad.push(`${where}：お題${o.no}の指令が空です`); });
       const rewards = (T.rewards || []).map((r, j) => ({ id: `T${t}-${j + 1}`, kind: KINDS.includes(r.kind) ? r.kind : '手掛かり', text: str(r.text, 500) })).filter(r => r.text);
