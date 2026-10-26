@@ -1,0 +1,174 @@
+/* ゲームの画面（個人ページ・GM手帳・トップ）。アーカイブと同じ「モールの案内板」の見た目。
+   港の青＝骨組み、案内板の黄色＝いま気にするもの（新着・自分の番）、役職ごとに1色。 */
+:root{
+  --paper:#EEF1F2; --panel:#FFFFFF; --ink:#15212B; --sub:#55636E; --line:#C9D1D6;
+  --harbor:#1C4F7A; --on-harbor:#FFFFFF; --sign:#F3C43C; --on-sign:#15212B;
+  --ok:#2E7D50; --ng:#C0392B; --warn-bg:#FFF4D1;
+  --r-koan:#1C4F7A; --r-beppan:#2E7D50; --r-tent:#7A4FA3; --r-shinshi:#C0392B;
+  --f:"BIZ UDPGothic","Hiragino Sans","Noto Sans JP",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#0F1820; --panel:#16222C; --ink:#E6ECEF; --sub:#9AA9B4; --line:#2A3A46;
+  --harbor:#7FB2E0; --on-harbor:#0F1820; --ok:#6CC291; --ng:#F07A6B; --warn-bg:#3A3215;
+  --r-koan:#7FB2E0; --r-beppan:#6CC291; --r-tent:#B79BE0; --r-shinshi:#F07A6B;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0F1820; --panel:#16222C; --ink:#E6ECEF; --sub:#9AA9B4; --line:#2A3A46;
+  --harbor:#7FB2E0; --on-harbor:#0F1820; --ok:#6CC291; --ng:#F07A6B; --warn-bg:#3A3215;
+  --r-koan:#7FB2E0; --r-beppan:#6CC291; --r-tent:#B79BE0; --r-shinshi:#F07A6B;
+  color-scheme:dark}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--f);font-size:16px;line-height:1.7;-webkit-tap-highlight-color:transparent}
+img{max-width:100%;display:block}
+a{color:var(--harbor)}
+:focus-visible{outline:3px solid var(--sign);outline-offset:2px}
+h1{font-size:22px;margin:4px 0 12px;line-height:1.4}
+h2{font-size:18px;margin:24px 0 8px;line-height:1.4}
+h3{font-size:16px;margin:0 0 4px}
+p{margin:0 0 10px}
+.sub{color:var(--sub);font-size:14px}
+.num{font-variant-numeric:tabular-nums}
+
+/* 上の帯：案内板 */
+.bar{position:sticky;top:0;z-index:10;background:var(--harbor);color:var(--on-harbor)}
+.bar-in{max-width:960px;margin:0 auto;padding:8px 16px;display:flex;align-items:center;gap:12px;min-height:56px}
+.pict{width:32px;height:32px;border-radius:50%;background:var(--on-harbor);color:var(--harbor);display:grid;place-items:center;font-weight:700;font-size:19px;flex:none}
+.bar-t{display:flex;flex-direction:column;line-height:1.3;min-width:0;flex:1}
+.bar-t b{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar-t small{font-size:12px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.clock{text-align:right;line-height:1.2;flex:none}
+.clock .ph{font-size:12px;opacity:.85;display:block}
+.clock .tm{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.clock.low .tm{color:var(--sign)}
+
+.wrap{max-width:960px;margin:0 auto;padding:16px 16px 110px}
+.wrap.gmw{padding-bottom:40px}
+
+/* 下のタブ（片手で押せる位置） */
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:10;background:var(--panel);border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom)}
+.tabs button{flex:1;max-width:160px;font:inherit;font-size:12px;font-weight:700;color:var(--sub);background:none;border:0;padding:8px 4px 10px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;position:relative}
+.tabs button .ic{font-size:20px;line-height:1.1}
+.tabs button[aria-current="page"]{color:var(--harbor)}
+.tabs button[aria-current="page"]::before{content:"";position:absolute;top:0;left:20%;right:20%;height:3px;background:var(--harbor);border-radius:0 0 3px 3px}
+.badge{position:absolute;top:4px;left:calc(50% + 6px);background:var(--sign);color:var(--on-sign);font-size:11px;min-width:18px;height:18px;border-radius:9px;display:grid;place-items:center;padding:0 5px}
+
+/* GMの上のタブ（横に並べる） */
+.gtabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;background:var(--panel);border-bottom:1px solid var(--line);position:sticky;top:56px;z-index:9;padding:0 12px}
+.gtabs button{font:inherit;font-weight:700;font-size:14px;color:var(--sub);background:none;border:0;padding:10px 12px;white-space:nowrap;cursor:pointer;position:relative;border-bottom:3px solid transparent}
+.gtabs button[aria-current="page"]{color:var(--harbor);border-bottom-color:var(--harbor)}
+.gtabs .badge{position:static;display:inline-grid;margin-left:4px;vertical-align:1px}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;margin:0 0 12px;min-width:0}
+.card.hl{border:2px solid var(--sign);box-shadow:inset 6px 0 0 var(--sign)}
+.card.alert{border:2px solid var(--ng);background:color-mix(in srgb,var(--ng) 8%,var(--panel))}
+.card.alert h3{color:var(--ng)}
+.card .hd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+
+.btn{font:inherit;font-weight:700;font-size:16px;border:2px solid var(--harbor);background:var(--harbor);color:var(--on-harbor);border-radius:8px;padding:10px 18px;cursor:pointer;min-height:46px;display:inline-flex;align-items:center;justify-content:center;gap:6px;text-decoration:none}
+.btn.ghost{background:transparent;color:var(--harbor)}
+.btn.sign{background:var(--sign);border-color:var(--sign);color:var(--on-sign)}
+.btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}
+.btn.ng{background:transparent;border-color:var(--ng);color:var(--ng)}
+.btn.small{font-size:14px;min-height:36px;padding:4px 12px}
+.btn.wide{width:100%}
+.btn[disabled]{opacity:.45;cursor:default}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.row.end{justify-content:flex-end}
+
+/* 役職 */
+.chip{display:inline-block;font-size:13px;font-weight:700;padding:1px 8px;border-radius:4px;color:#fff;background:var(--rc);white-space:nowrap;line-height:1.6}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .chip{color:#0F1820}}
+:root[data-theme="dark"] .chip{color:#0F1820}
+.r-公安{--rc:var(--r-koan)} .r-密使{--rc:var(--r-beppan)} .r-蜃気楼{--rc:var(--r-tent)} .r-内通者{--rc:var(--r-shinshi)}
+.chip.team{background:var(--ink);color:var(--paper)}
+.chip.none{background:var(--line);color:var(--sub)}
+.st{display:inline-block;font-size:12px;font-weight:700;padding:0 8px;border-radius:4px;border:1px solid currentColor;white-space:nowrap}
+.st.pending{color:var(--sub)} .st.ok{color:var(--ok)} .st.ng,.st.late{color:var(--ng)}
+
+/* 役職カード（タップで表示） */
+/* 開く前は枠の色でも役職が分からないようにする */
+.reveal{position:relative;border-radius:10px;overflow:hidden;background:var(--panel);border:2px solid var(--line)}
+.reveal.open{border-color:var(--rc)}
+.reveal .face{padding:18px 16px}
+.reveal .face .big{font-size:34px;font-weight:700;color:var(--rc);line-height:1.2}
+.reveal .lid{position:absolute;inset:0;background:var(--harbor);color:var(--on-harbor);display:grid;place-items:center;align-content:center;gap:8px;text-align:center;border:0;width:100%;font:inherit;cursor:pointer;padding:16px}
+.reveal .lid b{font-size:18px}
+.reveal.open .lid{display:none}
+
+/* お題 */
+.od{display:grid;grid-template-columns:44px 1fr;gap:12px}
+.od .no{font-size:24px;font-weight:700;color:var(--harbor);text-align:center;line-height:1.2}
+.od .tt{font-weight:700}
+.od .tx{margin:4px 0 6px}
+.od .cd{font-size:14px;color:var(--sub)}
+.od .cd b{color:var(--ink)}
+.od.taken{opacity:.75}
+.od.taken .no{color:var(--sub)}
+.tags{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.tag{font-size:12px;border:1px solid var(--line);border-radius:3px;padding:0 6px;color:var(--sub)}
+
+/* 届いたもの */
+.feed{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.feed li{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.feed li.new{border-color:var(--sign);box-shadow:inset 4px 0 0 var(--sign)}
+.feed li .k{font-size:12px;color:var(--sub);display:flex;justify-content:space-between;gap:8px}
+.feed li b{display:block}
+.feed li.reward{border-left:6px solid var(--harbor)}
+.feed li.alert{border-left:6px solid var(--ng)}
+.feed li.ng{border-left:6px solid var(--ng)}
+.feed li.contact,.feed li.right{border-left:6px solid var(--r-beppan)}
+
+.pw{display:inline-block;border:2px solid var(--r-shinshi);color:var(--r-shinshi);font-weight:700;padding:0 10px;border-radius:4px;font-size:18px}
+.slot{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;padding:8px 0;border-top:1px dashed var(--line)}
+.slot:first-of-type{border-top:0}
+.slot .tm{font-weight:700;font-variant-numeric:tabular-nums;color:var(--harbor)}
+.slot.done .tm{color:var(--ok)}
+.slot.now{background:var(--warn-bg);margin:0 -14px;padding:8px 14px}
+
+.thumb{border-radius:6px;overflow:hidden;background:var(--line);aspect-ratio:4/3}
+.thumb img{width:100%;height:100%;object-fit:cover}
+.photo-big{border-radius:8px;overflow:hidden;background:#000}
+.photo-big img{width:100%;max-height:70vh;object-fit:contain}
+
+/* 表 */
+.tw{overflow-x:auto;margin:8px 0 16px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:15px}
+th,td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:13px;color:var(--sub);font-weight:700;background:color-mix(in srgb,var(--line) 35%,var(--panel));white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+td.total{font-weight:700;font-size:17px}
+tr.first td{background:color-mix(in srgb,var(--sign) 18%,var(--panel))}
+tr.me td{box-shadow:inset 4px 0 0 var(--harbor)}
+
+/* フォーム */
+label.f{display:block;font-weight:700;margin:12px 0 4px}
+select,input[type=text],input[type=password],textarea{font:inherit;font-size:16px;width:100%;padding:10px 12px;border:2px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink)}
+select:focus,input:focus,textarea:focus{border-color:var(--harbor);outline:none}
+textarea{min-height:200px}
+.checks{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.checks label{display:grid;grid-template-columns:28px 24px 1fr;gap:8px;align-items:start;padding:6px 8px;border-radius:6px;cursor:pointer}
+.checks label:hover{background:color-mix(in srgb,var(--harbor) 7%,transparent)}
+.checks input{width:20px;height:20px;margin:2px 0 0}
+.checks .n{color:var(--sub);text-align:right;font-variant-numeric:tabular-nums}
+.mk{font-size:12px;font-weight:700;color:var(--r-beppan);white-space:nowrap}
+
+.toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:8px;font-weight:700;z-index:30;max-width:calc(100% - 32px);box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.toast.err{background:var(--ng);color:#fff}
+.empty{color:var(--sub);text-align:center;padding:24px 8px}
+.notice{background:var(--warn-bg);border-radius:8px;padding:10px 12px;margin:0 0 12px;font-size:15px}
+.loading{color:var(--sub);text-align:center;padding:40px 0}
+.hide{display:none!important}
+.vis{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+
+/* デモの案内 */
+.demo-bar{background:var(--sign);color:var(--on-sign);font-size:13px;font-weight:700;text-align:center;padding:6px 16px}
+.demo-bar a{color:inherit}
+/* 表は狭い画面では横にすべらせる（名前が縦に折れないように） */
+td b{white-space:nowrap}
+.tw table{min-width:520px}
+.tw.narrow table{min-width:0}

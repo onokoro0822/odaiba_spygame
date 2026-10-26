@@ -1,0 +1,14 @@
+{
+  "name": "odaiba-spy",
+  "version": "1.0.0",
+  "description": "台場スパイゲーム：参加者の個人ページとGM手帳、10/04の記録",
+  "scripts": {
+    "dev": "wrangler pages dev --port 8790",
+    "test": "node test/scoring.test.mjs",
+    "db:local": "wrangler d1 execute odaiba-spy --local --file src/schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^3.114.17"
+  },
+  "private": true
+}

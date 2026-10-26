@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1C4F7A">
+<title>台場スパイゲーム</title>
+<meta name="description" content="ショッピングモールを歩き回って遊ぶ、16人・3チームのスパイゲーム。お題の写真で手掛かりを集め、答えの写真の場所を推理し、チームに紛れた内通者を見抜く。スマホのデモで1人でも遊べます。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&display=swap">
+<link rel="stylesheet" href="/game.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='15' fill='%231C4F7A'/%3E%3Ctext x='16' y='23' font-size='20' font-weight='700' text-anchor='middle' fill='white' font-family='sans-serif'%3E%3F%3C/text%3E%3C/svg%3E">
+<style>
+.hero{background:var(--harbor);color:var(--on-harbor)}
+.hero-in{max-width:960px;margin:0 auto;padding:40px 16px 36px}
+.hero .kick{font-size:14px;font-weight:700;letter-spacing:.08em;opacity:.85;margin:0 0 6px}
+.hero h1{font-size:clamp(32px,8vw,52px);margin:0 0 10px;line-height:1.2;letter-spacing:.02em}
+.hero .lead{font-size:17px;max-width:34em;margin:0 0 22px}
+.hero .btn.sign{font-size:18px;padding:12px 24px}
+.hero .btn.ghost{color:var(--on-harbor);border-color:color-mix(in srgb,var(--on-harbor) 60%,transparent)}
+.hero .note{font-size:13px;opacity:.8;margin:12px 0 0}
+.flow{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;counter-reset:f}
+.flow li{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;counter-increment:f}
+.flow li::before{content:counter(f);display:block;font-size:26px;font-weight:700;color:var(--harbor);line-height:1.1}
+.flow li b{display:block;margin:2px 0}
+.flow li span{font-size:14px;color:var(--sub)}
+.rolecards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.rolecards>div{background:var(--panel);border-left:6px solid var(--rc);padding:12px 14px;border-radius:0 8px 8px 0}
+.rolecards b{color:var(--rc);font-size:18px}
+.rolecards p{margin:4px 0 0;font-size:14px}
+.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.shots figure{margin:0}
+.shots figcaption{font-size:13px;color:var(--sub);margin-top:4px}
+.tech li{margin:4px 0}
+footer.foot{max-width:960px;margin:0 auto;padding:20px 16px 40px;color:var(--sub);font-size:13px;border-top:1px solid var(--line)}
+</style>
+</head>
+<body>
+<header class="hero">
+  <div class="hero-in">
+    <p class="kick">ポイントハンティング × 人狼 × スパイミッション</p>
+    <h1>台場スパイゲーム</h1>
+    <p class="lead">ショッピングモールを歩き回って遊ぶ、16人・3チームのスパイゲームです。お題の写真を撮って手掛かりを集め、「答えの写真」が撮られた場所を推理します。ただしチームの中には、答えを知っている内通者が紛れています。</p>
+    <div class="row">
+      <button class="btn sign" type="button" id="demo">1人でデモを遊ぶ</button>
+      <a class="btn ghost" href="/archive/">2026年10月4日の記録を見る</a>
+    </div>
+    <p class="note">デモでは、ほかの15人とGMをコンピューターが動かします。1タームは約20分で、「次の場面へ進める」で飛ばすこともできます。スマホでもパソコンでも遊べます。</p>
+  </div>
+</header>
+<main class="wrap" style="padding-bottom:40px">
+  <h2>1タームの流れ</h2>
+  <ol class="flow">
+    <li><b>役職発表</b><span>3チームに分かれ、個人ページに自分だけの役職が届きます。</span></li>
+    <li><b>行動（60分）</b><span>出ているお題の写真を撮って投稿。GMが認めると、出した人にだけ手掛かりか割符が届きます。</span></li>
+    <li><b>確保</b><span>手掛かりから場所を推理し、答えに近い1枚をチームで1回だけ出します。</span></li>
+    <li><b>作戦会議と投票</b><span>チームの誰が内通者・密使・蜃気楼だったかを、一人ひとりが投票します。</span></li>
+    <li><b>結果発表</b><span>確保写真を20項目で採点し、正体と投票から全員の点数を出します。</span></li>
+  </ol>
+  <h2>役職</h2>
+  <div class="rolecards">
+    <div class="r-公安"><b>公安</b><p>手掛かりと仲間の行動から、紛れ込んだ3人の正体を見抜く。</p></div>
+    <div class="r-密使"><b>密使</b><p>答えの本物の情報を3つ知る味方。正体を隠して、さりげなくチームを導く。</p></div>
+    <div class="r-蜃気楼"><b>蜃気楼</b><p>内通者寄りの第三陣営。GMとの接触で内通者を知り、妨害の権利を得る。</p></div>
+    <div class="r-内通者"><b>内通者</b><p>答えの写真を持つ敵。嘘や誘導、妨害で、チームを答えから遠ざける。</p></div>
+  </div>
+  <h2>GMとの接触と妨害</h2>
+  <p>内通者・密使・蜃気楼には、GMと会う時間帯とおおよその場所、合言葉が届きます。会えたらGMが手帳で名前を押すだけで、伝える内容が本人のページに届きます。内通者が妨害を発動すると、「〇階で3人以上で写れ」という緊急任務が出て、達成するまで全チームがお題を獲得できなくなります。</p>
+
+  <h2>この作品について</h2>
+  <p>2026年10月4日に、お台場の3つのモール（ダイバーシティ東京プラザ・アクアシティお台場・デックス東京ビーチ）で、友人16人と遊ぶために作ったオリジナルのゲームです。当日はGMがLINEとスプレッドシートで手作業で進めました。その経験から、GMの手間を減らし、参加者が自分のスマホだけで遊べるようにしたのがこのWeb版です。お題や手掛かりは当日のものをそのまま使っています。</p>
+  <ul class="tech">
+    <li><b>個人ページ</b>：参加者ごとに推測できないURLを発行。ログインもパスワードも要りません。役職はタップしたときだけ表示します。</li>
+    <li><b>GM手帳</b>：写真の判定は「獲得／却下」の1タップ。同じお題の早い者勝ちは、GMが判定した順ではなく投稿した時刻の順で決まります。</li>
+    <li><b>自動採点</b>：得点表をそのままコードにしました。当日の投票と確保点を入れると、46人分の点数がすべて当日の記録と一致します。</li>
+    <li><b>しくみ</b>：Cloudflare Pages と D1（データベース）で、費用は0円。画面は数秒ごとに更新を確かめ、変わっていなければ中身を送らないので、16人で数時間遊んでも無料の範囲に収まります。</li>
+  </ul>
+  <p class="sub">主催する方へ：本番のゲームは <a href="/new">ゲームを作る</a> から作れます（主催者の鍵が必要です）。</p>
+</main>
+<footer class="foot">
+  <p>参加者の名前はコードネームに置き換えています。写真に写り込んだ一般の方はぼかしています。</p>
+  <p>お題や手掛かりは2026年10月時点のお店に合わせて作ったものです。今は変わっている場合があります。</p>
+</footer>
+<script src="/common.js"></script>
+<script>
+document.getElementById('demo').addEventListener('click', async e => {
+  const b = e.currentTarget; b.disabled = true; b.textContent = '準備しています…';
+  try {
+    const d = await G.api('demo', { method: 'POST' });
+    G.store.set('demo-gm:' + d.me, d.gm);
+    location.href = '/p/' + d.me;
+  } catch (err) { G.toast(err.message, true); b.disabled = false; b.textContent = '1人でデモを遊ぶ'; }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>ゲームを作る｜台場スパイゲーム</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&display=swap">
+<link rel="stylesheet" href="/game.css">
+</head>
+<body>
+<header class="bar"><div class="bar-in"><a class="pict" href="/" aria-label="トップへ" style="text-decoration:none">?</a><span class="bar-t"><b>ゲームを作る</b><small>主催者（GM）用</small></span></div></header>
+<main class="wrap" style="max-width:640px">
+  <h1>本番のゲームを作る</h1>
+  <p>参加者の名前を入れると、チームと役職を3ターム分まとめて割り振り、GM手帳を作ります。割り振りはGM手帳の「参加者」で直せます。</p>
+  <form class="card" id="f">
+    <label class="f" for="key">主催者の鍵</label>
+    <input type="password" id="key" name="key" autocomplete="off" required>
+    <label class="f" for="title">ゲームの名前</label>
+    <input type="text" id="title" name="title" value="台場スパイゲーム">
+    <label class="f" for="names">参加者の名前（1行に1人、12〜21人）</label>
+    <textarea id="names" name="names" required placeholder="アオサギ&#10;イタチ&#10;ウミネコ"></textarea>
+    <p class="sub" id="count">0人</p>
+    <button class="btn wide" type="submit">ゲームを作る</button>
+  </form>
+  <p class="sub">GM手帳のURLは、作ったあとの画面のアドレスです。なくさないようにブックマークしてください。</p>
+</main>
+<script src="/common.js"></script>
+<script>
+const f = document.getElementById('f'), ta = document.getElementById('names');
+ta.addEventListener('input', () => { document.getElementById('count').textContent = ta.value.split('\n').filter(s => s.trim()).length + '人'; });
+f.addEventListener('submit', async e => {
+  e.preventDefault();
+  const b = f.querySelector('button'); b.disabled = true;
+  try {
+    const d = await G.api('new', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(Object.fromEntries(new FormData(f))) });
+    location.href = '/gm/' + d.gm;
+  } catch (err) { G.toast(err.message, true); b.disabled = false; }
+});
+</script>
+</body>
+</html>
