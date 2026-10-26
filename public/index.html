@@ -43,10 +43,11 @@ footer.foot{max-width:960px;margin:0 auto;padding:20px 16px 40px;color:var(--sub
     <h1>台場スパイゲーム</h1>
     <p class="lead">ショッピングモールを歩き回って遊ぶ、16人・3チームのスパイゲームです。お題の写真を撮って手掛かりを集め、「答えの写真」が撮られた場所を推理します。ただしチームの中には、答えを知っている内通者が紛れています。</p>
     <div class="row">
-      <button class="btn sign" type="button" id="demo">1人でデモを遊ぶ</button>
+      <button class="btn sign" type="button" data-demo="player">参加者としてデモを遊ぶ</button>
+      <button class="btn sign" type="button" data-demo="gm">GMとしてデモを進める</button>
       <a class="btn ghost" href="/archive/">2026年10月4日の記録を見る</a>
     </div>
-    <p class="note">デモでは、ほかの15人とGMをコンピューターが動かします。1タームは約20分で、「次の場面へ進める」で飛ばすこともできます。スマホでもパソコンでも遊べます。</p>
+    <p class="note"><b>参加者として</b>：ほかの15人とGMをコンピューターが動かします。1タームは約20分で、「次の場面へ進める」で飛ばせます。<br><b>GMとして</b>：16人の参加者をコンピューターが動かし、あなたが写真の判定・接触・採点・進行をします。行動の60分は、時間を飛ばしながら進められます。本番前の練習にも使えます。</p>
   </div>
 </header>
 <main class="wrap" style="padding-bottom:40px">
@@ -84,14 +85,15 @@ footer.foot{max-width:960px;margin:0 auto;padding:20px 16px 40px;color:var(--sub
 </footer>
 <script src="/common.js"></script>
 <script>
-document.getElementById('demo').addEventListener('click', async e => {
-  const b = e.currentTarget; b.disabled = true; b.textContent = '準備しています…';
+document.querySelectorAll('[data-demo]').forEach(b => b.addEventListener('click', async () => {
+  const mode = b.dataset.demo, label = b.textContent; b.disabled = true; b.textContent = '準備しています…';
   try {
-    const d = await G.api('demo', { method: 'POST' });
+    const d = await G.api('demo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode }) });
+    if (mode === 'gm') { location.href = '/gm/' + d.gm; return; }
     G.store.set('demo-gm:' + d.me, d.gm);
     location.href = '/p/' + d.me;
-  } catch (err) { G.toast(err.message, true); b.disabled = false; b.textContent = '1人でデモを遊ぶ'; }
-});
+  } catch (err) { G.toast(err.message, true); b.disabled = false; b.textContent = label; }
+}));
 </script>
 </body>
 </html>

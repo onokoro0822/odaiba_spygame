@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>シナリオ編集｜台場スパイゲーム</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=BIZ+UDPGothic:wght@400;700&display=swap">
+<link rel="stylesheet" href="/game.css">
+<style>
+.ed textarea{min-height:76px}
+.ed .item{display:grid;grid-template-columns:40px 1fr;gap:10px;align-items:start}
+.ed .item .no{font-size:20px;font-weight:700;color:var(--harbor);text-align:center;padding-top:6px}
+.ed .item .ops{display:flex;gap:4px;justify-content:flex-end;margin-top:6px}
+.ed label.f{font-size:14px;margin:8px 0 2px}
+.ed .mini{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:8px}
+.dirty{color:var(--ng);font-weight:700;font-size:14px}
+.savebar{position:sticky;top:56px;z-index:9;background:var(--panel);border-bottom:1px solid var(--line);padding:8px 16px}
+.savebar .in{max-width:960px;margin:0 auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+</style>
+</head>
+<body>
+<header class="bar"><div class="bar-in"><a class="pict" href="/" aria-label="トップへ" style="text-decoration:none">?</a><span class="bar-t"><b>シナリオ編集</b><small>お題・手掛かり・採点・接触の文章を直す（主催者用）</small></span></div></header>
+<div class="savebar hide" id="savebar"><div class="in"><span id="status" class="sub"></span><span class="row"><button class="btn ghost small" type="button" data-op="export">書き出す</button><button class="btn ghost small" type="button" data-op="import">読み込む</button><button class="btn ghost small" type="button" data-op="reset">最初の内容に戻す</button><button class="btn small" type="button" data-op="save">保存する</button></span></div></div>
+<nav class="gtabs hide" id="tabs" aria-label="画面" style="top:105px"></nav>
+<main class="wrap ed" id="main" style="padding-bottom:60px"></main>
+<script src="/common.js"></script>
+<script src="/edit.js"></script>
+</body>
+</html>

@@ -4,8 +4,10 @@ CREATE TABLE IF NOT EXISTS games (
   demo INTEGER NOT NULL DEFAULT 0, opts TEXT NOT NULL DEFAULT '{}',
   term INTEGER NOT NULL DEFAULT 0, phase TEXT NOT NULL DEFAULT 'setup', -- setup brief action meeting vote result end
   phase_at INTEGER, action_at INTEGER, bot_at INTEGER,
-  ver INTEGER NOT NULL DEFAULT 1, created INTEGER NOT NULL
+  ver INTEGER NOT NULL DEFAULT 1, created INTEGER NOT NULL, scen TEXT
 );
+-- シナリオ。id = 'main' が編集中のもの、'g:<ゲームのid>' がゲームを作ったときに写したもの
+CREATE TABLE IF NOT EXISTS scen (id TEXT PRIMARY KEY, title TEXT, data TEXT NOT NULL, updated INTEGER);
 CREATE TABLE IF NOT EXISTS players (
   id TEXT PRIMARY KEY, game TEXT NOT NULL, tok TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL, seat INTEGER NOT NULL, bot INTEGER NOT NULL DEFAULT 0

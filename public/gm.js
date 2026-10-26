@@ -23,7 +23,7 @@ function render() {
   if (S.error) { G.patch($('#main'), `<div class="empty"><h1>ページが見つかりません</h1></div>`); return; }
   const g = S.game;
   G.patch($('#bar'), `<span class="pict" aria-hidden="true">?</span><span class="bar-t"><b>GM手帳</b><small>${esc(g.title)}${g.term ? `　ターム${g.term}／${g.terms} ${esc(g.mall)}` : ''}</small></span>${G.clockHTML(g)}`);
-  G.patch($('#demo'), g.demo ? `<div class="demo-bar">デモのGM手帳です。参加者の写真はコンピューターが出しています。</div>` : '');
+  G.patch($('#demo'), g.demo ? demoBar() : '');
   G.patch($('#tabs'), tabs());
   const f = { flow, judge, contact, odai, sab, kakuho, people, res }[tab] || flow;
   const y = window.scrollY;
@@ -40,10 +40,34 @@ function step() {
     if (nv) warn.push(`未投票 ${nv}人`);
   }
   if (S.game.phase === 'action') { const p = S.subs.filter(x => x.state === 'pending' && x.kind !== 'kakuho').length; if (p) warn.push(`判定待ちが ${p}件 あります`); }
-  const nx = nextContact();
-  if (nx && (S.game.phase === 'brief' || S.game.phase === 'action')) warn.push(`次の接触 ${G.hm(nx.from)}〜${G.hm(nx.to)}　${nx.role}・${nx.n}回目　${nx.place}`);
-  return `<div class="card" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between"><div><div class="sub">いま：${G.PHASE[S.game.phase]}${S.game.term ? `（ターム${S.game.term}）` : ''}</div>${warn.map(w => `<div style="color:var(--ng);font-size:14px;font-weight:700">${esc(w)}</div>`).join('')}${n?.[2] ? `<div class="sub">${esc(n[2])}</div>` : ''}</div>
+  return contactMemo() + `<div class="card" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between"><div><div class="sub">いま：${G.PHASE[S.game.phase]}${S.game.term ? `（ターム${S.game.term}）` : ''}</div>${warn.map(w => `<div style="color:var(--ng);font-size:14px;font-weight:700">${esc(w)}</div>`).join('')}${n?.[2] ? `<div class="sub">${esc(n[2])}</div>` : ''}</div>
   ${n ? `<button class="btn sign" type="button" data-phase="${n[0]}" data-label="${esc(n[1])}">${esc(n[1])} →</button>` : '<span class="sub">ゲームは終わりました</span>'}</div>`;
+}
+
+// 接触メモ：いま（なければ次）の接触の時刻・場所・合言葉・来る人。どのタブにも出す
+function contactMemo() {
+  const ph = S.game.phase;
+  if ((ph !== 'brief' && ph !== 'action') || !S.contacts) return '';
+  const t = G.now(), L = [];
+  for (const c of S.contacts) for (const x of c.slots) L.push({ ...x, role: c.role, pw: c.pw });
+  L.sort((a, b) => a.fromMin - b.fromMin);
+  const left = L.filter(x => !(x.to && x.to < t) && x.who.some(w => !w.done));
+  if (!left.length) return '';
+  const [cur, next] = left, nowIn = cur.from && t >= cur.from && t <= cur.to;
+  const when = x => x.from ? `${G.hm(x.from)}〜${G.hm(x.to)}` : `行動開始の${x.fromMin}〜${x.toMin}分後`;
+  const until = cur.from && !nowIn ? `（あと${Math.max(0, Math.ceil((cur.from - t) / 60000))}分）` : '';
+  return `<div class="card r-${esc(cur.role)}${nowIn ? ' hl' : ''}" style="border-left:6px solid var(--rc)">
+  <div class="hd"><b>${nowIn ? 'いまの接触' : '次の接触'}</b>${chip(cur.role)}<span>${cur.n}回目</span><span class="num" style="font-weight:700;color:var(--harbor)">${when(cur)}</span>${nowIn ? '<span class="st ok">受付中</span>' : `<span class="sub">${until}</span>`}</div>
+  <p style="margin:0 0 6px;font-size:17px"><b>${esc(cur.place)}</b>　合言葉 <span class="pw">${esc(cur.pw)}</span></p>
+  <div class="row">${cur.who.map(w => w.done ? `<span class="btn ghost small" aria-disabled="true">✓ ${esc(w.name)}（${w.team}）</span>` : `<button class="btn small" type="button" data-contact="${esc(cur.role)}" data-slot="${cur.n}" data-player="${w.id}" data-name="${esc(w.name)}"${ph === 'action' ? '' : ' disabled'}>${esc(w.name)}（${w.team}）に会えた</button>`).join('')}</div>
+  ${next ? `<p class="sub" style="margin:8px 0 0">その次：${when(next)}　${esc(next.role)}・${next.n}回目　${esc(next.place)}（合言葉「${esc(next.pw)}」）</p>` : ''}</div>`;
+}
+
+// デモの案内。GMデモでは行動中の時間を飛ばせる
+function demoBar() {
+  const g = S.game, B = (to, l) => `<button class="btn small sign" style="min-height:28px;padding:0 10px;border-color:var(--on-sign)" type="button" data-shift="${to}">${l}</button>`;
+  if (g.mode !== 'gm') return `<div class="demo-bar">デモのGM手帳です。参加者とGMの操作はコンピューターが動かしています。</div>`;
+  return `<div class="demo-bar">GMデモです。16人の参加者はコンピューターです。判定・接触・採点・進行はあなたがやります。${g.phase === 'action' ? `<span class="row" style="justify-content:center;gap:6px;margin-top:4px">${B('5m', '5分進める')}${B('contact', '次の接触まで進める')}${B('end', '行動の終わりまで進める')}</span>` : ''}${g.phase === 'action' ? '<span style="display:block;font-weight:400">接触の時間になったら、合言葉を言いに来たことにして名前を押してください。</span>' : ''}</div>`;
 }
 
 // ---------- 進行 ----------
@@ -106,6 +130,14 @@ function plan() {
 // デモのコンピューターの投稿には写真がない
 const photoBox = (id, alt) => id ? `<div class="photo-big" style="margin-bottom:10px"><img src="${G.img(id)}" alt="${alt}" loading="lazy"></div>`
   : `<div class="thumb" style="margin-bottom:10px;display:grid;place-items:center;color:var(--sub);font-size:14px;aspect-ratio:16/9">コンピューターの投稿（写真なし）</div>`;
+const sampleImg = no => `/api/sample?k=${encodeURIComponent(G.key)}&t=${S.game.term}&no=${no}`;
+// お題の判定：投稿された写真と、下見のときの見本写真を並べる
+function judgePhotos(x) {
+  const smp = x.kind === 'odai' && x.what?.sample;
+  if (!x.photo && smp) return `<div class="photo-big" style="margin-bottom:4px"><img src="${sampleImg(x.ref)}" alt="見本写真" loading="lazy"></div><p class="sub" style="margin:0 0 10px">デモなので、見本写真をそのまま投稿に使っています。</p>`;
+  if (!smp) return photoBox(x.photo, `${esc(x.name)}さんの写真`);
+  return `<div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-bottom:10px;align-items:start"><div><div class="sub">投稿</div>${photoBox(x.photo, `${esc(x.name)}さんの写真`)}</div><div><div class="sub">見本（下見）</div><div class="photo-big"><img src="${sampleImg(x.ref)}" alt="見本写真" loading="lazy"></div></div></div>`;
+}
 function what(x) {
   if (x.kind === 'odai' && x.what) return `<div class="hd"><b>お題${x.what.no}</b><span>${esc(x.what.title)}</span></div><p style="margin:0 0 4px">${esc(x.what.order)}</p>${x.what.cond ? `<p class="sub" style="margin:0"><b>条件：</b>${esc(x.what.cond)}</p>` : ''}`;
   if (x.kind === 'kinkyu' && x.what) return `<div class="hd"><b style="color:var(--ng)">緊急任務</b></div><p style="margin:0">${esc(x.what.floor)}階で、${esc(x.what.team)}チームの3人以上が写っているか</p>`;
@@ -119,7 +151,7 @@ function judge() {
   let h = `<h1>判定待ち <span class="sub">${P.length}件（投稿の早い順）</span></h1>`;
   if (!P.length) h += `<p class="empty">${S.game.phase === 'action' ? '判定待ちの写真はありません。届くと自動で出ます。' : '行動中に届いた写真がここに出ます。'}</p>`;
   h += `<div class="grid2">${P.map(x => `<div class="card${x.kind !== 'odai' ? ' hl' : ''}" id="s${x.id}">
-    ${photoBox(x.photo, `${esc(x.name)}さんの写真`)}
+    ${judgePhotos(x)}
     ${what(x)}
     <div class="row" style="margin:8px 0">${teamChip(x.team)}<span>${esc(x.name)}</span><span class="sub num">${G.hm(x.at)}</span></div>
     ${x.earlier ? `<p class="notice" style="margin:0 0 8px">同じお題に、別のチームが先に出した写真があります。先にそちらを判定してください。</p>` : ''}
@@ -172,7 +204,7 @@ function kakuho() {
     if (!k.sub) return `<div class="card"><div class="hd">${teamChip(k.team)}</div><p class="sub" style="margin:0">確保写真はまだ出ていません。出なかったチームは0点です。</p></div>`;
     const sel = draft[k.team] || new Set(k.checks || []);
     return `<div class="card${k.score == null ? ' hl' : ''}"><div class="hd">${teamChip(k.team)}${k.score == null ? '<span class="st pending">未採点</span>' : `<span class="st ok">${k.score}点</span>`}</div>
-    ${photoBox(k.photo, `${k.team}チームの確保写真`)}
+    ${k.photo || !S.game.demo ? photoBox(k.photo, `${k.team}チームの確保写真`) : '<p class="notice">デモなので、確保写真はありません。採点の練習として、項目にチェックを入れてみてください。</p>'}
     <form data-kakuho="${k.team}"><ul class="checks">${T.checks.map(c => `<li><label><span class="n">${c.no}</span><input type="checkbox" name="c" value="${c.no}"${sel.has(c.no) ? ' checked' : ''}><span>${esc(c.item)}${c.bep ? ' <span class="mk">密使の項目</span>' : ''}</span></label></li>`).join('')}</ul>
     <div class="row end" style="margin-top:10px"><span class="sub" data-count>${sel.size}点</span><button class="btn" type="submit">この点数で保存</button></div></form></div>`;
   }).join('');
@@ -228,6 +260,7 @@ document.addEventListener('click', e => {
     run(() => G.act('judge', { sub: Number(d.judge), ok: d.ok === '1', note }), d.ok === '1' ? '認めました' : '却下しました'); return;
   }
   if (d.contact) { if (confirm(`${d.name}さんの接触（${d.contact}・${d.slot}回目）を成功にしますか？`)) run(() => G.act('contact', { role: d.contact, slot: Number(d.slot), player: d.player }), '届けました'); return; }
+  if (d.shift) { run(() => G.act('demoShift', { to: d.shift }), '時間を進めました'); return; }
   if (d.clear) { if (confirm('写真なしで緊急任務を解除しますか？')) run(() => G.act('clear', { id: Number(d.clear) }), '解除しました'); return; }
   if (d.shuffle !== undefined) { if (confirm('3ターム分のチームと役職を、すべて割り振り直しますか？')) run(() => G.act('shuffle'), '割り振り直しました'); return; }
   if (d.copy) { copy(d.copy); return; }

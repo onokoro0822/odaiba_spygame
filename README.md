@@ -2,7 +2,9 @@
 
 ショッピングモールを歩き回って遊ぶ、16人・3チームのスパイゲームです。お題の写真を撮って手掛かりを集め、「答えの写真」が撮られた場所を推理します。チームには、答えを知っている内通者が紛れています。
 
-- 遊ぶ：https://odaiba-spy.onokorocreation.com/ （「1人でデモを遊ぶ」で、ほかの15人とGMをコンピューターが動かします）
+- 遊ぶ：https://odaiba-spy.onokorocreation.com/
+  - 参加者としてデモ：ほかの15人とGMをコンピューターが動かす（1ターム約20分、飛ばせる）
+  - GMとしてデモ：16人をコンピューターが動かし、判定・接触・採点・進行を自分でやる（行動の60分は時間を飛ばしながら）
 - 2026年10月4日に、お台場で16人で遊んだときの記録：https://odaiba-spy.onokorocreation.com/archive/
 
 ## できること
@@ -22,6 +24,11 @@
 - 接触：会えた人の名前を押すと、伝える内容（チームの公安の名前、内通者の名前、妨害の権利）が本人のページに自動で届く。
 - 確保写真の採点は、答えの20項目にチェックを入れるだけ。点数はすべて自動計算。
 - チームと役職は3ターム分を自動で割り振り（同じ人が同じ特殊役職を続けて引きにくいように）、始まる前なら手で直せる。
+
+**シナリオ編集**（`/edit`、主催者の鍵が要る）
+
+- お題の名前・指令・条件・タグ、手掛かりと割符、採点の項目（密使に伝える3つ）、接触の合言葉・時間・場所、答えの場所の説明を直せる。並べ替え・追加・削除、JSONでの書き出し・読み込みもできる。
+- 保存すると、そのあとに作るゲームとデモから使われる。ゲームは作ったときのシナリオを写して持つので、進行中のゲームは変わらない。
 
 ## しくみ
 
@@ -44,13 +51,15 @@ src/
   engine.js        ゲームの進行と、画面に返す状態
   scoring.js       得点の計算
   roles.js         チーム分けと役職の割り振り
-  bots.js          デモ用のコンピューターの参加者とGM
+  bots.js          デモ用のコンピューターの参加者とGM（参加者デモ／GMデモ）
+  scenario.js      編集画面から届いたシナリオの点検
   content.json     お題・手掛かり・割符・接触の場所（scripts/build_content.py で作る）
   schema.sql       データベースの表
 test/
   scoring.test.mjs 当日の投票と確保点から、46人分の点数が記録と一致するか
   flow.mjs         1ターム分を最初から最後まで通す（41項目）
   demo.mjs         デモのコンピューターが動くか
+  gmdemo.mjs       GMデモを最後まで進められるか
 ```
 
 ## 手元で動かす
@@ -69,6 +78,7 @@ node test/flow.mjs        # npm run dev を動かしたまま、別の画面で
 
 ```
 npx wrangler d1 execute odaiba-spy --remote --file src/schema.sql   # 初回だけ
+npx wrangler d1 execute odaiba-spy --remote --file src/migrate_001_scen.sql   # 2026-10-26 より前に作ったデータベースだけ
 npx wrangler pages deploy public --project-name odaiba-spy --branch main
 ```
 

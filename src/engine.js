@@ -22,8 +22,27 @@ const run = (env, sql, ...a) => env.DB.prepare(sql).bind(...a).run();
 const st = (env, sql, ...a) => env.DB.prepare(sql).bind(...a);
 const bump = (env, g) => st(env, 'UPDATE games SET ver = ver + 1 WHERE id = ?', g.id);
 
-export const content = C;
-export const termOf = t => C.terms[t - 1];
+// シナリオ（お題・手掛かり・接触の場所など）はゲームごとに持つ。作ったときの「編集中のシナリオ」を写して使うので、
+// あとで編集しても進行中のゲームは変わらない。g.C がなければ同梱の content.json
+export const DEFAULT = C;
+export const CT = g => g?.C || C;
+export const termOf = (g, t) => CT(g).terms[t - 1];
+const scenCache = new Map();
+export async function attach(env, g) {
+  if (!g || g.C || !g.scen) return g;
+  let c = scenCache.get(g.scen);
+  if (!c) {
+    const r = await env.DB.prepare('SELECT data FROM scen WHERE id = ?').bind(g.scen).first();
+    if (r) { c = JSON.parse(r.data); if (scenCache.size > 50) scenCache.clear(); scenCache.set(g.scen, c); }
+  }
+  g.C = c || C;
+  return g;
+}
+// 編集中のシナリオ（なければ同梱のもの）
+export async function mainScenario(env) {
+  const r = await env.DB.prepare("SELECT data, updated FROM scen WHERE id = 'main'").first();
+  return r ? { data: JSON.parse(r.data), updated: r.updated } : { data: C, updated: null };
+}
 const opts = g => JSON.parse(g.opts || '{}');
 export function durations(g) { return { ...C.durations, ...(opts(g).dur || {}) }; }
 // GMが入れた、タームごとの行動開始の予定（開催日＋時刻、日本時間）
@@ -42,14 +61,18 @@ function slotTimes(g, slot, t = g.term) {
 function actionEnd(g) { return g.action_at == null ? null : g.action_at + durations(g).action * MIN; }
 
 // ---------- ゲームを作る ----------
-export async function createGame(env, { title, names, demo = false, dur, me = 0 }) {
+// mode：デモのとき、'player'（自分が参加者の1人）か 'gm'（自分がGM、16人ともコンピューター）
+export async function createGame(env, { title, names, demo = false, dur, me = 0, mode }) {
   names = names.map(s => s.trim()).filter(Boolean);
   if (names.length < 12 || names.length > 21) throw new Bad('参加者は12〜21人にしてください');
   if (new Set(names).size !== names.length) throw new Bad('同じ名前が2回入っています');
-  const g = { id: token(10), gm: token(), title: title || C.title, demo: demo ? 1 : 0, opts: JSON.stringify(dur ? { dur } : {}), created: now() };
+  const { data } = await mainScenario(env);
+  const id = token(10);
+  const g = { id, gm: token(), title: title || data.title, demo: demo ? 1 : 0, opts: JSON.stringify({ ...(dur ? { dur } : {}), ...(mode ? { mode } : {}) }), created: now(), scen: 'g:' + id, C: data };
   const players = names.map((name, i) => ({ id: token(8), tok: token(), name, seat: i, bot: demo && i !== me ? 1 : 0 }));
-  const plan = assignAll(players.map(p => p.id), C.terms.length);
-  const q = [st(env, 'INSERT INTO games (id, gm, title, demo, opts, created) VALUES (?, ?, ?, ?, ?, ?)', g.id, g.gm, g.title, g.demo, g.opts, g.created)];
+  const plan = assignAll(players.map(p => p.id), CT(g).terms.length);
+  const q = [st(env, 'INSERT INTO scen (id, title, data, updated) VALUES (?, ?, ?, ?)', g.scen, data.title, JSON.stringify(data), now()),
+    st(env, 'INSERT INTO games (id, gm, title, demo, opts, created, scen) VALUES (?, ?, ?, ?, ?, ?, ?)', g.id, g.gm, g.title, g.demo, g.opts, g.created, g.scen)];
   for (const p of players) q.push(st(env, 'INSERT INTO players (id, game, tok, name, seat, bot) VALUES (?, ?, ?, ?, ?, ?)', p.id, g.id, p.tok, p.name, p.seat, p.bot));
   plan.forEach((a, i) => { for (const [pid, x] of Object.entries(a)) q.push(st(env, 'INSERT INTO roles (game, term, player, team, role) VALUES (?, ?, ?, ?, ?)', g.id, i + 1, pid, x.team, x.role)); });
   await env.DB.batch(q);
@@ -58,18 +81,18 @@ export async function createGame(env, { title, names, demo = false, dur, me = 0 
 
 export async function deleteGame(env, id) {
   await env.DB.batch(['games:id', 'players:game', 'roles:game', 'odai:game', 'subs:game', 'photos:game', 'inbox:game', 'contacts:game', 'rights:game', 'sabotage:game', 'harikomi:game', 'kakuho:game', 'votes:game']
-    .map(s => { const [t, c] = s.split(':'); return st(env, `DELETE FROM ${t} WHERE ${c} = ?`, id); }));
+    .map(s => { const [t, c] = s.split(':'); return st(env, `DELETE FROM ${t} WHERE ${c} = ?`, id); }).concat(st(env, 'DELETE FROM scen WHERE id = ?', 'g:' + id)));
 }
 
 // 合言葉の代わりの長い文字列から、GMか参加者かを調べる
 export async function who(env, k) {
   if (!k || k.length < 16) throw new Bad('ページが見つかりません', 404);
   let g = await one(env, 'SELECT * FROM games WHERE gm = ?', k);
-  if (g) return { g, gm: true };
+  if (g) return { g: await attach(env, g), gm: true };
   const p = await one(env, 'SELECT * FROM players WHERE tok = ?', k);
   if (!p) throw new Bad('ページが見つかりません', 404);
   g = await one(env, 'SELECT * FROM games WHERE id = ?', p.game);
-  return { g, p, gm: false };
+  return { g: await attach(env, g), p, gm: false };
 }
 
 // ---------- 読み出しの共通部分 ----------
@@ -101,14 +124,14 @@ async function termResult(env, g, L, t) {
     all(env, 'SELECT team, score, checks FROM kakuho WHERE game = ? AND term = ?', g.id, t),
     all(env, "SELECT team, COUNT(*) AS n FROM sabotage WHERE game = ? AND term = ? GROUP BY team", g.id, t),
   ]);
-  const T = termOf(t), bepNos = T.checks.filter(c => c.bep).map(c => c.no);
+  const T = termOf(g, t), bepNos = T.checks.filter(c => c.bep).map(c => c.no);
   const teams = {};
   for (const tm of TEAMS) teams[tm] = { kakuho: 0, bep3: 0, bougai: 0 };
   for (const k of kak) { const ch = JSON.parse(k.checks || '[]'); teams[k.team].kakuho = k.score ?? 0; teams[k.team].bep3 = ch.filter(n => bepNos.includes(n)).length; teams[k.team].checks = ch; }
   for (const s of sab) teams[s.team].bougai = s.n;
   const V = Object.fromEntries(votes.map(v => [v.player, v]));
   const members = Object.values(L.R[t] || {}).filter(r => r.role).map(r => ({ id: r.player, team: r.team, role: r.role, vote: V[r.player] ? { s: V[r.player].s, b: V[r.player].b, t: V[r.player].t } : {} }));
-  const sc = scoreTerm(members, teams, C.sabotageMax);
+  const sc = scoreTerm(members, teams, CT(g).sabotageMax);
   return {
     t, teams: TEAMS.map(tm => ({ team: tm, ...teams[tm], top: sc[members.find(m => m.team === tm)?.id]?.top ?? false })),
     players: members.map(m => ({ id: m.id, name: L.name[m.id], team: m.team, role: m.role, vote: { s: L.name[m.vote.s] || '', b: L.name[m.vote.b] || '', t: L.name[m.vote.t] || '' }, voted: !!V[m.id], pt: sc[m.id].pt }))
@@ -118,7 +141,7 @@ async function termResult(env, g, L, t) {
 function finished(g, t) { return t < g.term || (t === g.term && (g.phase === 'result' || g.phase === 'end')); }
 async function results(env, g, L) {
   const out = [];
-  for (let t = 1; t <= C.terms.length; t++) if (finished(g, t)) out.push(await termResult(env, g, L, t));
+  for (let t = 1; t <= CT(g).terms.length; t++) if (finished(g, t)) out.push(await termResult(env, g, L, t));
   const tot = {};
   for (const r of out) for (const p of r.players) { const x = tot[p.id] ||= { id: p.id, name: p.name, sum: 0, by: {} }; x.sum += p.pt; x.by[r.t] = p.pt; }
   return { terms: out, totals: Object.values(tot).sort((a, b) => b.sum - a.sum) };
@@ -133,7 +156,7 @@ export async function playerState(env, g, p) {
   if (g.phase !== 'setup' && g.phase !== 'end') base.res = await results(env, g, L);
   else if (g.phase === 'end') base.res = await results(env, g, L);
   if (t === 0 || !me || !me.role) { base.rest = t > 0; return base; }
-  const T = termOf(t), team = me.team;
+  const T = termOf(g, t), team = me.team;
   const mates = Object.values(L.cur).filter(r => r.team === team && r.role).map(r => ({ id: r.player, name: L.name[r.player] }));
   const [od, subs, sab, kak, vote, rights] = await Promise.all([
     all(env, 'SELECT no, state, team, ord, opened_at FROM odai WHERE game = ? AND term = ?', g.id, t),
@@ -169,15 +192,15 @@ export async function playerState(env, g, p) {
 }
 function gameInfo(g) {
   const o = opts(g);
-  return { id: g.id, title: g.title, term: g.term, terms: C.terms.length, phase: g.phase, phase_at: g.phase_at, action_at: g.action_at, dur: durations(g), demo: !!g.demo, mall: g.term ? termOf(g.term).mall : null,
-    plan: { date: o.date || '', start: o.start || {}, at: Object.fromEntries(C.terms.map(T => [T.t, planStart(g, T.t)])) }, malls: C.terms.map(T => T.mall) };
+  return { id: g.id, title: g.title, term: g.term, terms: CT(g).terms.length, phase: g.phase, phase_at: g.phase_at, action_at: g.action_at, dur: durations(g), demo: !!g.demo, mall: g.term ? termOf(g, g.term).mall : null,
+    mode: o.mode || null, plan: { date: o.date || '', start: o.start || {}, at: Object.fromEntries(CT(g).terms.map(T => [T.t, planStart(g, T.t)])) }, malls: CT(g).terms.map(T => T.mall) };
 }
 
 // 開催日と、タームごとの行動開始の予定を入れる
 export async function setPlan(env, g, date, start) {
   if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Bad('開催日の形が違います');
   const st2 = {};
-  for (const T of C.terms) { const v = start?.[T.t]; if (!v) continue; if (!/^\d{1,2}:\d{2}$/.test(v)) throw new Bad(`ターム${T.t}の時刻の形が違います`); st2[T.t] = v.padStart(5, '0'); }
+  for (const T of CT(g).terms) { const v = start?.[T.t]; if (!v) continue; if (!/^\d{1,2}:\d{2}$/.test(v)) throw new Bad(`ターム${T.t}の時刻の形が違います`); st2[T.t] = v.padStart(5, '0'); }
   const o = { ...opts(g), date: date || '', start: st2 };
   await env.DB.batch([st(env, 'UPDATE games SET opts = ?, ver = ver + 1 WHERE id = ?', JSON.stringify(o), g.id)]);
 }
@@ -188,10 +211,10 @@ export async function gmState(env, g) {
   const s = { v: g.ver, now: now(), gm: true, game: gameInfo(g), players: L.players.map(p => ({ id: p.id, name: p.name, tok: p.tok, bot: !!p.bot })), roles: L.R };
   s.res = await results(env, g, L);
   // 3ターム分の予定表（行動開始と接触の時刻）
-  s.schedule = C.terms.map(T => ({ t: T.t, mall: T.mall, start: planStart(g, T.t) ?? (T.t === t ? g.action_at : null),
+  s.schedule = CT(g).terms.map(T => ({ t: T.t, mall: T.mall, start: planStart(g, T.t) ?? (T.t === t ? g.action_at : null),
     contacts: Object.entries(T.contacts).flatMap(([role, c]) => c.slots.map(x => ({ role, n: x.n, place: x.place, pw: c.pw, ...slotTimes(g, x, T.t) }))).sort((a, b) => a.fromMin - b.fromMin) }));
   if (t === 0) return s;
-  const T = termOf(t);
+  const T = termOf(g, t);
   const [od, subs, sab, H, kak, votes, con, rights] = await Promise.all([
     all(env, 'SELECT no, state, team, ord, sub FROM odai WHERE game = ? AND term = ?', g.id, t),
     all(env, 'SELECT id, kind, ref, state, note, at, player, team, photo, judged_at FROM subs WHERE game = ? AND term = ? ORDER BY at', g.id, t),
@@ -202,7 +225,7 @@ export async function gmState(env, g) {
     all(env, 'SELECT role, slot, player FROM contacts WHERE game = ? AND term = ?', g.id, t),
     all(env, 'SELECT player, source, used_at FROM rights WHERE game = ? AND term = ?', g.id, t),
   ]);
-  const odaiInfo = no => { const o = T.odai.find(x => x.no === no); return o ? { no, title: o.title, order: o.order, cond: o.cond } : null; };
+  const odaiInfo = no => { const o = T.odai.find(x => x.no === no); return o ? { no, title: o.title, order: o.order, cond: o.cond, sample: !!o.sample } : null; };
   s.term = { t, mall: T.mall, answer: T.answer, checks: T.checks, bep: T.bep, floors: T.floors, actionEnd: actionEnd(g) };
   s.odai = od.map(o => ({ ...odaiInfo(o.no), state: o.state, team: o.team, ord: o.ord })).sort((a, b) => a.no - b.no);
   s.subs = subs.map(x => ({ ...x, name: L.name[x.player],
@@ -283,7 +306,7 @@ export async function sabotage(env, g, p) {
   if (g.phase !== 'action') throw new Bad('妨害は行動の時間だけ使えます');
   const r = await one(env, 'SELECT id FROM rights WHERE game = ? AND term = ? AND player = ? AND used_at IS NULL ORDER BY id LIMIT 1', g.id, g.term, p.id);
   if (!r) throw new Bad('妨害の権利がありません');
-  const T = termOf(g.term), floor = T.floors[Math.floor(Math.random() * T.floors.length)];
+  const T = termOf(g, g.term), floor = T.floors[Math.floor(Math.random() * T.floors.length)];
   const res = await run(env, 'INSERT INTO sabotage (game, term, team, by, floor, at) VALUES (?, ?, ?, ?, ?, ?)', g.id, g.term, me.team, p.id, floor, now());
   await env.DB.batch([
     st(env, 'UPDATE rights SET used_at = ? WHERE id = ?', now(), r.id), bump(env, g),
@@ -295,20 +318,20 @@ export async function sabotage(env, g, p) {
 // ---------- GMの操作 ----------
 export async function phase(env, g, to) {
   const L = await load(env, g), i = PHASES.indexOf(g.phase), q = [];
-  const next = g.phase === 'result' ? (g.term < C.terms.length ? 'brief' : 'end') : g.phase === 'setup' ? 'brief' : PHASES[i + 1];
+  const next = g.phase === 'result' ? (g.term < CT(g).terms.length ? 'brief' : 'end') : g.phase === 'setup' ? 'brief' : PHASES[i + 1];
   if (to !== next) throw new Bad('この順番では進められません');
   if (to === 'brief') {
-    const t = g.term + 1, T = termOf(t);
+    const t = g.term + 1, T = termOf(g, t);
     const bad = checkRoles({ [t]: L.R[t] || {} });
     if (bad.length) throw new Bad(`役職の割り振りを直してください：${bad.join('、')}`);
     q.push(st(env, "UPDATE games SET term = ?, phase = 'brief', phase_at = ?, action_at = NULL, ver = ver + 1 WHERE id = ?", t, now(), g.id));
     T.odai.forEach(o => q.push(st(env, 'INSERT OR IGNORE INTO odai (game, term, no) VALUES (?, ?, ?)', g.id, t, o.no)));
     // 張り込み：チームごとに、内通者以外の人の「瞬間」を5つ
-    const cur = L.R[t] || {}, acts = C.harikomiActions.slice().sort(() => Math.random() - .5);
+    const cur = L.R[t] || {}, acts = CT(g).harikomiActions.slice().sort(() => Math.random() - .5);
     let ai = 0;
     for (const tm of TEAMS) {
       const M = Object.values(cur).filter(r => r.team === tm && r.role && r.role !== '内通者').map(r => r.player).sort(() => Math.random() - .5);
-      for (let k = 0; k < C.harikomiPerTeam && M.length; k++) q.push(st(env, 'INSERT INTO harikomi (game, term, team, target, action) VALUES (?, ?, ?, ?, ?)', g.id, t, tm, M[k % M.length], acts[ai++ % acts.length]));
+      for (let k = 0; k < CT(g).harikomiPerTeam && M.length; k++) q.push(st(env, 'INSERT INTO harikomi (game, term, team, target, action) VALUES (?, ?, ?, ?, ?)', g.id, t, tm, M[k % M.length], acts[ai++ % acts.length]));
     }
     for (const r of Object.values(cur)) {
       if (!r.role) { q.push(st(env, 'INSERT INTO inbox (game, player, term, kind, title, body, at) VALUES (?, ?, ?, ?, ?, ?, ?)', g.id, r.player, t, 'info', `ターム${t}はお休みです`, 'このタームは見学です。次のタームを待ってください。', now())); continue; }
@@ -317,7 +340,7 @@ export async function phase(env, g, to) {
   } else if (to === 'action') {
     const t = g.term;
     q.push(st(env, "UPDATE games SET phase = 'action', phase_at = ?, action_at = ?, ver = ver + 1 WHERE id = ?", now(), now(), g.id));
-    q.push(st(env, `UPDATE odai SET state = 'open', opened_at = ? WHERE game = ? AND term = ? AND no IN (SELECT no FROM odai WHERE game = ? AND term = ? ORDER BY no LIMIT ${C.openCount})`, now(), g.id, t, g.id, t));
+    q.push(st(env, `UPDATE odai SET state = 'open', opened_at = ? WHERE game = ? AND term = ? AND no IN (SELECT no FROM odai WHERE game = ? AND term = ? ORDER BY no LIMIT ${CT(g).openCount})`, now(), g.id, t, g.id, t));
     q.push(...toAll(env, g, L, 'info', '行動開始', `行動の時間は${durations(g).action}分です。お題の写真を撮って投稿してください。`));
   } else if (to === 'result') {
     const kak = await all(env, 'SELECT team, score FROM kakuho WHERE game = ? AND term = ?', g.id, g.term);
@@ -337,7 +360,7 @@ export async function judge(env, g, sid, ok, note = '') {
   const s = await one(env, 'SELECT * FROM subs WHERE game = ? AND id = ?', g.id, sid);
   if (!s) throw new Bad('投稿が見つかりません');
   if (s.state !== 'pending') throw new Bad('この投稿は判定済みです');
-  const q = [bump(env, g)], T = termOf(s.term), pname = L.name[s.player];
+  const q = [bump(env, g)], T = termOf(g, s.term), pname = L.name[s.player];
   const set = (state, n = note) => st(env, 'UPDATE subs SET state = ?, note = ?, judged_at = ? WHERE id = ?', state, n || null, now(), sid);
   if (!ok) {
     q.push(set('ng'));
@@ -366,8 +389,8 @@ export async function judge(env, g, sid, ok, note = '') {
     q.push(set('ok'));
     q.push(st(env, 'UPDATE harikomi SET done = ? WHERE id = ?', sid, h.id));
     const sp = holder(L.cur, h.team, '内通者');
-    const got = sp ? (await one(env, "SELECT COUNT(*) AS n FROM rights WHERE game = ? AND term = ? AND player = ? AND source = 'harikomi'", g.id, s.term, sp)).n : C.harikomiMax;
-    if (sp && got < C.harikomiMax) {
+    const got = sp ? (await one(env, "SELECT COUNT(*) AS n FROM rights WHERE game = ? AND term = ? AND player = ? AND source = 'harikomi'", g.id, s.term, sp)).n : CT(g).harikomiMax;
+    if (sp && got < CT(g).harikomiMax) {
       q.push(st(env, "INSERT INTO rights (game, term, player, source, at) VALUES (?, ?, ?, 'harikomi', ?)", g.id, s.term, sp, now()));
       q.push(await msg(env, g, sp, 'right', '張り込み成功：妨害の権利が増えました', `${h.team}チームの張り込み「${L.name[h.target]}さんが${h.action}瞬間」が達成されました。好きなときに妨害を発動できます。`));
     }
@@ -378,7 +401,7 @@ export async function judge(env, g, sid, ok, note = '') {
 }
 
 export async function contact(env, g, role, slot, pid) {
-  const L = await load(env, g), T = termOf(g.term), r = L.cur[pid];
+  const L = await load(env, g), T = termOf(g, g.term), r = L.cur[pid];
   if (g.phase !== 'action') throw new Bad('接触は行動の時間だけです');
   if (!r || r.role !== role || !T.contacts[role]?.slots.some(x => x.n === slot)) throw new Bad('この人はこの接触の対象ではありません');
   const done = await one(env, 'SELECT 1 FROM contacts WHERE game = ? AND term = ? AND role = ? AND slot = ? AND player = ?', g.id, g.term, role, slot, pid);
@@ -400,7 +423,7 @@ export async function contact(env, g, role, slot, pid) {
 }
 
 export async function scoreKakuho(env, g, team, checks) {
-  const T = termOf(g.term);
+  const T = termOf(g, g.term);
   if (!['meeting', 'vote', 'action'].includes(g.phase)) throw new Bad('いまは採点できません');
   const k = await one(env, 'SELECT sub FROM kakuho WHERE game = ? AND term = ? AND team = ?', g.id, g.term, team);
   if (!k) throw new Bad('このチームの確保写真はまだありません');
@@ -427,9 +450,9 @@ export async function editRole(env, g, t, pid, team, role) {
 export async function reshuffle(env, g) {
   if (g.phase !== 'setup' && g.phase !== 'result') throw new Bad('いまは割り振り直せません');
   const L = await load(env, g), ids = L.players.map(p => p.id);
-  const from = g.term + 1, plan = assignAll(ids, C.terms.length);
+  const from = g.term + 1, plan = assignAll(ids, CT(g).terms.length);
   const q = [bump(env, g)];
-  for (let t = from; t <= C.terms.length; t++) for (const id of ids) q.push(st(env, 'INSERT OR REPLACE INTO roles (game, term, player, team, role) VALUES (?, ?, ?, ?, ?)', g.id, t, id, plan[t - 1][id].team, plan[t - 1][id].role));
+  for (let t = from; t <= CT(g).terms.length; t++) for (const id of ids) q.push(st(env, 'INSERT OR REPLACE INTO roles (game, term, player, team, role) VALUES (?, ?, ?, ?, ?)', g.id, t, id, plan[t - 1][id].team, plan[t - 1][id].role));
   await env.DB.batch(q);
 }
 

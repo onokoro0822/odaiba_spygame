@@ -39,6 +39,15 @@ if hari:
             for _, a in lst:
                 if a not in actions: actions.append(a)
 
+# 取り込み済みの見本写真（import_samples.py で付けた "sample"）は残す
+try:
+    old = json.load(open(os.path.join(ROOT, 'src/content.json')))
+    for T, OT in zip(terms, old['terms']):
+        for o, oo in zip(T['odai'], OT['odai']):
+            if oo.get('sample'): o['sample'] = oo['sample']
+except FileNotFoundError:
+    pass
+
 out = {'title': '台場スパイゲーム', 'subtitle': 'お台場の3つのモールで遊ぶスパイゲーム',
        'durations': {'action': 60, 'meeting': 10, 'vote': 5}, 'openCount': 3,
        'harikomiPerTeam': 5, 'harikomiMax': 3, 'sabotageMax': 4,

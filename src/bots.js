@@ -18,18 +18,21 @@ export async function tick(env, g) {
   if (t - last < 4 * SEC) return false;
   const lock = await env.DB.prepare('UPDATE games SET bot_at = ? WHERE id = ? AND (bot_at IS NULL OR bot_at = ?)').bind(t, g.id, g.bot_at ?? null).run();
   if (!lock.meta.changes) return false;
-  const dt = Math.min(30, (t - last) / SEC);
+  // GMデモで時間を飛ばしたときは、そのぶん長めに動く
+  const dt = Math.min(gmMode(g) ? 300 : 30, (t - last) / SEC);
   try { return await step(env, g, t, dt); } catch (e) { console.error('bot', e); return false; }
 }
 
+// GMデモ：16人ともコンピューターで、判定・接触・採点・進行はデモを遊ぶ人（GM）がやる
+export const gmMode = g => JSON.parse(g.opts || '{}').mode === 'gm';
+
 async function step(env, g, t, dt) {
-  const d = E.durations(g), since = (t - (g.phase_at || g.created)) / SEC;
+  const d = E.durations(g), since = (t - (g.phase_at || g.created)) / SEC, gm = gmMode(g);
   const db = (sql, ...a) => env.DB.prepare(sql).bind(...a);
-  // ---- 時間がきたら進める（GMの代わり） ----
-  const next = { brief: ['action', WAIT.brief], action: ['meeting', d.action * 60], meeting: ['vote', d.meeting * 60], vote: ['result', d.vote * 60], result: [g.term < E.content.terms.length ? 'brief' : 'end', WAIT.result] }[g.phase];
-  if (g.phase === 'setup') { await E.phase(env, g, 'brief'); return true; }
-  if (!next) return false;
-  if (since >= next[1]) {
+  // ---- 時間がきたら進める（GMの代わり。GMデモでは進めない） ----
+  const next = gm ? null : { brief: ['action', WAIT.brief], action: ['meeting', d.action * 60], meeting: ['vote', d.meeting * 60], vote: ['result', d.vote * 60], result: [g.term < E.CT(g).terms.length ? 'brief' : 'end', WAIT.result] }[g.phase];
+  if (g.phase === 'setup' && !gm) { await E.phase(env, g, 'brief'); return true; }
+  if (next && since >= next[1]) {
     await catchUp(env, g, next[0]);
     await E.phase(env, g, next[0]);
     return true;
@@ -41,10 +44,11 @@ async function step(env, g, t, dt) {
   let changed = false;
 
   if (g.phase === 'action') {
-    const T = E.termOf(g.term), left = d.action * 60 - since, k = 12 / d.action; // 行動が短いほど、たくさん動く
+    // 行動が短いほど、たくさん動く。GMデモは本番の長さのまま、判定が1分に2件くらい来るように
+    const T = E.termOf(g, g.term), left = d.action * 60 - since, k = gm ? 0.8 : 12 / d.action;
     // GMの代わりの判定：届いてから少したった写真を、早い順に
     const pend = (await db("SELECT * FROM subs WHERE game = ? AND term = ? AND state = 'pending' ORDER BY at", g.id, g.term).all()).results;
-    for (const s of pend) {
+    for (const s of gm ? [] : pend) {
       if (t - s.at < (P[s.player].bot ? 12 : 6) * SEC) continue;
       const ok = !P[s.player].bot || s.kind !== 'odai' || Math.random() < 0.85;
       try { await E.judge(env, g, s.id, ok, ok ? '' : pick(NG_NOTES)); changed = true; } catch { /* 先の写真が残っているときは次の回に */ }
@@ -76,7 +80,7 @@ async function step(env, g, t, dt) {
     // 接触：枠の時間に入ったら、コンピューターの役職の人はだいたい成功する
     const done = (await db('SELECT role, slot, player FROM contacts WHERE game = ? AND term = ?', g.id, g.term).all()).results;
     const min = since / 60, scale = d.action / 60;
-    for (const [role, c] of Object.entries(T.contacts)) for (const x of c.slots) {
+    for (const [role, c] of gm ? [] : Object.entries(T.contacts)) for (const x of c.slots) {
       if (min < x.from * scale || min > x.to * scale) continue;
       for (const r of bots.filter(b => b.role === role)) {
         if (done.some(k => k.role === role && k.slot === x.n && k.player === r.player)) continue;
@@ -98,13 +102,13 @@ async function step(env, g, t, dt) {
       await botVote(env, g, P[r.player], r, roles);
       changed = true;
     }
-    await scoreAll(env, g, true);
+    if (!gm) await scoreAll(env, g, true);
   }
   return changed;
 }
 
 // 場面を進める前に、コンピューターがまだやっていないことを済ませる（飛ばしたときも結果がそれらしくなるように）
-async function catchUp(env, g, next) {
+export async function catchUp(env, g, next) {
   const db = (sql, ...a) => env.DB.prepare(sql).bind(...a);
   const players = (await db('SELECT * FROM players WHERE game = ?', g.id).all()).results;
   const P = Object.fromEntries(players.map(p => [p.id, p]));
@@ -120,7 +124,7 @@ async function catchUp(env, g, next) {
     const voted = new Set((await db('SELECT player FROM votes WHERE game = ? AND term = ?', g.id, g.term).all()).results.map(v => v.player));
     const g2 = g.phase === 'vote' || g.phase === 'meeting' ? g : { ...g, phase: 'vote' };
     for (const r of roles) if (P[r.player].bot && !voted.has(r.player)) await botVote(env, g2, P[r.player], r, roles);
-    await scoreAll(env, g);
+    if (!gmMode(g)) await scoreAll(env, g);
   }
 }
 async function botVote(env, g, p, r, roles) {
@@ -132,7 +136,7 @@ async function botVote(env, g, p, r, roles) {
 
 // 確保写真の採点（GMの代わり）。答えの20項目から、それらしい数だけ当たりにする
 async function scoreAll(env, g, onlyBots = false) {
-  const T = E.termOf(g.term);
+  const T = E.termOf(g, g.term);
   const ks = (await env.DB.prepare('SELECT k.team, k.score, s.player FROM kakuho k JOIN subs s ON s.id = k.sub WHERE k.game = ? AND k.term = ?').bind(g.id, g.term).all()).results;
   for (const k of ks) {
     if (k.score != null) continue;
@@ -148,11 +152,27 @@ async function scoreAll(env, g, onlyBots = false) {
 export async function demoAction(env, g, p, type, b) {
   if (!g.demo) throw new E.Bad('この操作はできません', 403);
   if (type === 'demoSkip') {
-    const next = { setup: 'brief', brief: 'action', action: 'meeting', meeting: 'vote', vote: 'result', result: g.term < E.content.terms.length ? 'brief' : 'end' }[g.phase];
+    const next = { setup: 'brief', brief: 'action', action: 'meeting', meeting: 'vote', vote: 'result', result: g.term < E.CT(g).terms.length ? 'brief' : 'end' }[g.phase];
     if (!next) throw new E.Bad('ゲームは終わっています');
     await catchUp(env, g, next);
     await E.phase(env, g, next);
     return {};
+  }
+  // GMデモ：行動中の時間を進める（行動の開始を前にずらす）
+  if (type === 'demoShift') {
+    if (g.phase !== 'action') throw new E.Bad('時間を進められるのは行動中だけです');
+    const d = E.durations(g), t = E.now(), end = g.action_at + d.action * 60000;
+    let ms = 5 * 60000;
+    if (b.to === 'contact') {
+      const T = E.termOf(g, g.term), k = d.action / 60;
+      const starts = Object.values(T.contacts).flatMap(c => c.slots.map(x => g.action_at + Math.round(x.from * k * 60000))).filter(x => x > t + 1000).sort((a, c) => a - c);
+      if (!starts.length) throw new E.Bad('このタームの接触はもうありません');
+      ms = starts[0] - t;
+    }
+    if (b.to === 'end') ms = end - t - 60000;
+    ms = Math.max(0, Math.min(ms, end - t - 30000));
+    await env.DB.prepare('UPDATE games SET action_at = action_at - ?, phase_at = phase_at - ?, bot_at = bot_at - ?, ver = ver + 1 WHERE id = ?').bind(ms, ms, Math.min(ms, 300000), g.id).run();
+    return { ms };
   }
   if (type === 'demoContact') {
     const r = await env.DB.prepare('SELECT role FROM roles WHERE game = ? AND term = ? AND player = ?').bind(g.id, g.term, p.id).first();
