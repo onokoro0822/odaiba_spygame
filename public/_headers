@@ -5,3 +5,5 @@
   X-Robots-Tag: noindex
 /gm/*
   X-Robots-Tag: noindex
+/kiroku-*
+  X-Robots-Tag: noindex, nofollow

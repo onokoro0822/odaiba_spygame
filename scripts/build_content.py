@@ -1,8 +1,8 @@
-"""public/archive/data.json から、ゲームで使う中身（src/content.json）を作る。
+"""../private/archive_site/data.json（10/04 の記録）から、ゲームで使う中身（src/content.json）を作る。
 答えの写真は public/_secret/ にコピーする（関数からだけ読める場所）。"""
 import json, re, shutil, os, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-d = json.load(open(os.path.join(ROOT, 'public/archive/data.json')))
+d = json.load(open(os.path.join(os.path.dirname(ROOT), 'private/archive_site/data.json')))
 hari = sys.argv[1] if len(sys.argv) > 1 else None
 
 def hm(s): h, m = s.split(':'); return int(h) * 60 + int(m)
@@ -55,5 +55,5 @@ out = {'title': '台場スパイゲーム', 'subtitle': 'お台場の3つのモ�
 json.dump(out, open(os.path.join(ROOT, 'src/content.json'), 'w'), ensure_ascii=False, indent=1)
 os.makedirs(os.path.join(ROOT, 'public/_secret'), exist_ok=True)
 for t in (1, 2, 3):
-    shutil.copy(os.path.join(ROOT, f'public/archive/img/term{t}.jpg'), os.path.join(ROOT, f'public/_secret/term{t}.jpg'))
+    shutil.copy(os.path.join(os.path.dirname(ROOT), f'private/archive_site/img/term{t}.jpg'), os.path.join(ROOT, f'public/_secret/term{t}.jpg'))
 print('terms', len(terms), 'actions', len(actions), {r: c['slots'] for r, c in terms[0]['contacts'].items()})

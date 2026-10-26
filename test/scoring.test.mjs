@@ -1,7 +1,7 @@
 // 10/04 の実際の投票と確保点から、アーカイブの点数がそのまま出るかを確かめる
 import { readFileSync } from 'node:fs';
 import { scoreTerm } from '../src/scoring.js';
-const D = JSON.parse(readFileSync(new URL('../public/archive/data.json', import.meta.url)));
+const D = JSON.parse(readFileSync(new URL('../../private/archive_site/data.json', import.meta.url)));
 let bad = 0, n = 0;
 for (const t of [1, 2, 3]) {
   const S = D.scores.filter(s => s.t === t);

@@ -18,7 +18,7 @@ function render() {
   const g = S.game;
   G.patch($('#bar'), `<span class="pict" aria-hidden="true">?</span><span class="bar-t"><b>${esc(S.me.name)}${S.team ? `　<small style="display:inline">${esc(S.team)}チーム</small>` : ''}</b><small>${g.term ? `ターム${g.term}／${g.terms}　${esc(g.mall)}` : esc(g.title)}</small></span>${G.clockHTML(g)}`);
   const gmk = G.store.get('demo-gm:' + G.key, '');
-  G.patch($('#demo'), g.demo ? `<div class="demo-bar">デモです。ほかの15人とGMはコンピューターが動かしています。${g.phase !== 'end' ? `<button class="btn small sign" style="min-height:28px;padding:0 10px;margin-left:6px;border-color:var(--on-sign)" type="button" data-act="skip">次の場面へ進める</button>` : ''}${gmk ? ` <a href="/gm/${esc(gmk)}" target="_blank" rel="noopener">GM手帳を見る</a>` : ''}</div>` : '');
+  G.patch($('#demo'), g.demo && g.mode && g.mode !== 'player' ? `<div class="demo-bar">${g.mode === 'tour-player' ? '参加者・画面の案内' : '参加者・やってみる'}（デモ）。ほかの15人とGMはコンピューターです。${g.mode === 'try-player' && g.phase !== 'end' ? `<button class="btn small sign" style="min-height:28px;padding:0 10px;margin-left:6px;border-color:var(--on-sign)" type="button" data-act="skip">次の場面へ進める</button>` : ''}</div>` : g.demo ? `<div class="demo-bar">デモです。ほかの15人とGMはコンピューターが動かしています。${g.phase !== 'end' ? `<button class="btn small sign" style="min-height:28px;padding:0 10px;margin-left:6px;border-color:var(--on-sign)" type="button" data-act="skip">次の場面へ進める</button>` : ''}${gmk ? ` <a href="/gm/${esc(gmk)}" target="_blank" rel="noopener">GM手帳を見る</a>` : ''}</div>` : '');
   // 「届いたもの」を開いたら既読にする。新着の印は、開いた時点で未読だったものに付ける
   if (tab === 'clue' && S.inbox.length && S.inbox[0].id > seen) { shownSeen = seen; seen = S.inbox[0].id; G.store.set(seenKey, seen); }
   const unread = S.inbox.filter(m => m.id > seen).length;
@@ -39,6 +39,7 @@ function alerts() {
 function now() {
   const g = S.game;
   if (g.phase === 'setup') return `<h1>まもなく始まります</h1><div class="card"><p>あなたのコードネームは <b>${esc(S.me.name)}</b> です。</p><p>GMの合図でターム1が始まると、この画面にチームと役職が出ます。このページはあなた専用です。URLは人に見せないでください。</p></div>${schedule()}${howto()}`;
+  if (S.gmNow) return `<h1>ターム${g.term}はGMです</h1><div class="card hl"><p>このタームは、あなたがGMを担当します。GM手帳で、写真の判定や接触を進めてください。このタームの点数はありません（合計は、参加したターム数で補正されます）。</p><a class="btn sign wide" href="/gm/${esc(G.key)}">GM手帳を開く</a></div>`;
   if (S.rest) return `<h1>このタームはお休みです</h1><p>次のタームを待ってください。</p>`;
   if (g.phase === 'end') return `<h1>おつかれさまでした</h1>${totals()}`;
   if (g.phase === 'result') return termResult(S.res.terms.find(r => r.t === g.term), true);
@@ -92,23 +93,23 @@ function role() {
   const r = S.role, I = G.ROLE_INFO[r];
   let h = `<h1>役職</h1>${roleCard()}`;
   if (!roleOpen) return h + `<p class="sub">役職を開くと、任務と、役職だけに届く情報が出ます。</p>`;
-  h += `<div class="card"><h3>点数</h3><ul style="margin:0;padding-left:1.2em">${I.pts.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`;
-  if (S.bep) h += `<div class="card hl"><h3>答えの写真の本物の情報（密使だけ）</h3><ul style="margin:0;padding-left:1.2em">${S.bep.map(x => `<li>${esc(x)}</li>`).join('')}</ul><p class="sub" style="margin:6px 0 0">この3つが確保写真に入るごとに＋2点。</p></div>`;
-  if (S.answer) h += `<div class="card hl"><h3>答えの写真（内通者だけ）</h3><div class="photo-big" style="margin:8px 0"><img src="${G.answerImg(g.term)}" alt="答えの写真"></div><p style="margin:0">${esc(S.answer)}</p><p class="sub" style="margin:6px 0 0">チームには見せずに、嘘や誘導で答えから遠ざけてください。</p></div>`;
+  h += `<div class="card" data-tour="points"><h3>点数</h3><ul style="margin:0;padding-left:1.2em">${I.pts.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`;
+  if (S.bep) h += `<div class="card hl" data-tour="bep"><h3>答えの写真の本物の情報（密使だけ）</h3><ul style="margin:0;padding-left:1.2em">${S.bep.map(x => `<li>${esc(x)}</li>`).join('')}</ul><p class="sub" style="margin:6px 0 0">この3つが確保写真に入るごとに＋2点。</p></div>`;
+  if (S.answer) h += `<div class="card hl" data-tour="answer"><h3>答えの写真（内通者だけ）</h3><div class="photo-big" style="margin:8px 0"><img src="${G.answerImg(g.term)}" alt="答えの写真"></div><p style="margin:0">${esc(S.answer)}</p><p class="sub" style="margin:6px 0 0">チームには見せずに、嘘や誘導で答えから遠ざけてください。</p></div>`;
   if (S.contact) {
     const c = S.contact, t = G.now();
-    h += `<div class="card"><h3>GMとの接触</h3><p>決めた時間に決めた場所へ行き、GMに合言葉を直接言ってください。遅れたらその回は失敗です。</p><p>合言葉 <span class="pw">${esc(c.pw)}</span></p>
-    ${c.slots.map(x => { const nowIn = x.from && t >= x.from && t <= x.to; return `<div class="slot${x.done ? ' done' : ''}${nowIn ? ' now' : ''}"><span class="tm">${x.n}回目　${x.from ? `${G.hm(x.from)}〜${G.hm(x.to)}` : `開始${x.fromMin}分後〜${x.toMin}分後`}</span><span>${esc(x.place)}${x.done ? '　<span class="st ok">成功</span>' : nowIn ? '　<b>いまの時間です</b>' : ''}${g.demo && nowIn && !x.done ? `<br><button class="btn small" type="button" data-act="democontact" data-slot="${x.n}">（デモ）GMに合言葉を言えたことにする</button>` : ''}</span></div>`; }).join('')}
+    h += `<div class="card" data-tour="contact"><h3>GMとの接触</h3><p>決めた時間に決めた場所へ行き、GMに合言葉を直接言ってください。遅れたらその回は失敗です。</p><p>合言葉 <span class="pw">${esc(c.pw)}</span></p>
+    ${c.slots.map(x => { const nowIn = x.from && t >= x.from && t <= x.to; return `<div class="slot${x.done ? ' done' : ''}${nowIn ? ' now' : ''}"><span class="tm">${x.n}回目　${x.from ? `${G.hm(x.from)}〜${G.hm(x.to)}` : `開始${x.fromMin}分後〜${x.toMin}分後`}</span><span>${esc(x.place)}${x.done ? '　<span class="st ok">成功</span>' : nowIn ? '　<b>いまの時間です</b>' : ''}${g.demo && (nowIn || g.mode !== 'player') && !x.done && g.phase === 'action' ? `<br><button class="btn small" type="button" data-act="democontact" data-slot="${x.n}">（デモ）GMに合言葉を言えたことにする</button>` : ''}</span></div>`; }).join('')}
     <p class="sub" style="margin:8px 0 0">${r === '密使' ? '成功するたびに、自分のチームの公安を1人教えてもらえます。' : r === '蜃気楼' ? '1回目でチームの内通者が分かり、2回目で妨害を1回発動できます。' : '成功するたびに、妨害を1回発動できます。'}接触の結果は「届いたもの」に届きます。</p></div>`;
   }
   if (r === '内通者' || r === '蜃気楼') {
     const can = g.phase === 'action' && S.rights > 0;
-    h += `<div class="card${S.rights ? ' hl' : ''}"><h3>妨害</h3><p>使える権利：<b class="num">${S.rights}</b>回</p><p class="sub">発動すると自分のチームに「〇階で3人以上で写れ」という緊急任務が出て、写真が認められるまで全チームがお題を獲得できなくなります。</p>
+    h += `<div class="card${S.rights ? ' hl' : ''}" data-tour="sabotage"><h3>妨害</h3><p>使える権利：<b class="num">${S.rights}</b>回</p><p class="sub">発動すると自分のチームに「〇階で3人以上で写れ」という緊急任務が出て、写真が認められるまで全チームがお題を獲得できなくなります。</p>
     <button class="btn ng wide" type="button" data-act="sabotage"${can ? '' : ' disabled'}>妨害を発動する</button></div>`;
   }
   if (S.harikomi) {
     const by = {}; S.harikomi.forEach(x => (by[x.team] ||= []).push(x));
-    h += `<div class="card"><h3>張り込み（内通者だけ）</h3><p class="sub">下の瞬間を撮って出すと、写っている人のチームの内通者が妨害を1回発動できます（1人1タームに3回まで）。どのチームの内通者が撮ってもOKです。</p>
+    h += `<div class="card" data-tour="harikomi"><h3>張り込み（内通者だけ）</h3><p class="sub">下の瞬間を撮って出すと、写っている人のチームの内通者が妨害を1回発動できます（1人1タームに3回まで）。どのチームの内通者が撮ってもOKです。</p>
     ${Object.entries(by).map(([tm, L]) => `<h3 style="margin-top:12px">${esc(tm)}チームの張り込み${tm === S.team ? '（あなたの権利）' : ''}</h3>${L.map(x => {
       const p = S.subs.find(s => s.kind === 'harikomi' && s.ref === x.id && s.state === 'pending');
       return `<div class="slot"><span>${x.done ? '<span class="st ok">達成</span>' : p ? '<span class="st pending">判定待ち</span>' : `<button class="btn small" type="button" data-up="harikomi" data-ref="${x.id}"${g.phase === 'action' ? '' : ' disabled'}>撮る</button>`}</span><span>${esc(x.target)}さんが${esc(x.action)}瞬間</span></div>`;
@@ -157,7 +158,8 @@ function totals() {
   const L = S.res?.totals || [];
   if (!L.length) return '<p class="empty">結果はまだありません。</p>';
   let rank = 0, prev = null;
-  return `<div class="tw"><table><thead><tr><th class="num">順位</th><th>名前</th>${(S.res.terms).map(r => `<th class="num">T${r.t}</th>`).join('')}<th class="num">合計</th></tr></thead><tbody>${L.map((x, i) => { if (x.sum !== prev) { rank = i + 1; prev = x.sum; } return `<tr class="${rank === 1 ? 'first' : ''}${x.id === S.me.id ? ' me' : ''}"><td class="num">${rank}</td><td><b>${esc(x.name)}</b>${rank === 1 && S.game.phase === 'end' ? '　MVP' : ''}</td>${S.res.terms.map(r => `<td class="num">${x.by[r.t] ?? '－'}</td>`).join('')}<td class="num total">${x.sum}</td></tr>`; }).join('')}</tbody></table></div>`;
+  const sc = S.res.scaled;
+  return `<div class="tw"><table><thead><tr><th class="num">順位</th><th>名前</th>${(S.res.terms).map(r => `<th class="num">T${r.t}</th>`).join('')}<th class="num">合計</th>${sc ? '<th class="num">補正後</th>' : ''}</tr></thead><tbody>${L.map((x, i) => { if (x.adj !== prev) { rank = i + 1; prev = x.adj; } return `<tr class="${rank === 1 ? 'first' : ''}${x.id === S.me.id ? ' me' : ''}"><td class="num">${rank}</td><td><b>${esc(x.name)}</b>${rank === 1 && S.game.phase === 'end' ? '　MVP' : ''}</td>${S.res.terms.map(r => `<td class="num">${x.by[r.t] ?? '－'}</td>`).join('')}<td class="num${sc ? '' : ' total'}">${x.sum}</td>${sc ? `<td class="num total">${x.adj}${x.rate !== 1 ? `<span class="sub">（×${Math.round(x.rate * 100) / 100}）</span>` : ''}</td>` : ''}</tr>`; }).join('')}</tbody></table></div>${sc ? '<p class="sub">GMや休みで参加したタームが少ない人は、合計を「終わったターム数 ÷ 参加したターム数」倍しています（3タームのうち2つなら1.5倍）。順位は補正後で決めます。</p>' : ''}`;
 }
 function res() {
   const R = S.res?.terms || [];

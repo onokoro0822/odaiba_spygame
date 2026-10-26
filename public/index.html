@@ -33,6 +33,10 @@
 .shots figure{margin:0}
 .shots figcaption{font-size:13px;color:var(--sub);margin-top:4px}
 .tech li{margin:4px 0}
+.demos{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;max-width:760px}
+.demos>div{background:color-mix(in srgb,var(--on-harbor) 10%,transparent);border:1px solid color-mix(in srgb,var(--on-harbor) 35%,transparent);border-radius:10px;padding:12px 14px}
+.demos b{display:block;font-size:17px;margin-bottom:8px}
+.demos p{font-size:14px;margin:8px 0 0;opacity:.9}
 footer.foot{max-width:960px;margin:0 auto;padding:20px 16px 40px;color:var(--sub);font-size:13px;border-top:1px solid var(--line)}
 </style>
 </head>
@@ -42,12 +46,11 @@ footer.foot{max-width:960px;margin:0 auto;padding:20px 16px 40px;color:var(--sub
     <p class="kick">ポイントハンティング × 人狼 × スパイミッション</p>
     <h1>台場スパイゲーム</h1>
     <p class="lead">ショッピングモールを歩き回って遊ぶ、16人・3チームのスパイゲームです。お題の写真を撮って手掛かりを集め、「答えの写真」が撮られた場所を推理します。ただしチームの中には、答えを知っている内通者が紛れています。</p>
-    <div class="row">
-      <button class="btn sign" type="button" data-demo="player">参加者としてデモを遊ぶ</button>
-      <button class="btn sign" type="button" data-demo="gm">GMとしてデモを進める</button>
-      <a class="btn ghost" href="/archive/">2026年10月4日の記録を見る</a>
+    <div class="demos">
+      <div><b>参加者として</b><div class="row"><button class="btn sign" type="button" data-demo="tour-player">画面の案内を見る</button><button class="btn sign" type="button" data-demo="try-player">やってみる</button></div><p>個人ページの見方と、写真を出す・手掛かりを読む・接触・妨害・確保・投票。</p></div>
+      <div><b>GMとして</b><div class="row"><button class="btn sign" type="button" data-demo="tour-gm">画面の案内を見る</button><button class="btn sign" type="button" data-demo="try-gm">やってみる</button></div><p>GM手帳の見方と、写真の判定・接触・緊急任務・採点・進行。</p></div>
     </div>
-    <p class="note"><b>参加者として</b>：ほかの15人とGMをコンピューターが動かします。1タームは約20分で、「次の場面へ進める」で飛ばせます。<br><b>GMとして</b>：16人の参加者をコンピューターが動かし、あなたが写真の判定・接触・採点・進行をします。行動の60分は、時間を飛ばしながら進められます。本番前の練習にも使えます。</p>
+    <p class="note">「画面の案内」は、画面の上に説明が順番に出ます。「やってみる」は、課題のリストに沿って自分で操作します。どちらも時間は気にしなくて大丈夫です。ほかの参加者はコンピューターが動かします。</p>
   </div>
 </header>
 <main class="wrap" style="padding-bottom:40px">
@@ -89,7 +92,7 @@ document.querySelectorAll('[data-demo]').forEach(b => b.addEventListener('click'
   const mode = b.dataset.demo, label = b.textContent; b.disabled = true; b.textContent = '準備しています…';
   try {
     const d = await G.api('demo', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ mode }) });
-    if (mode === 'gm') { location.href = '/gm/' + d.gm; return; }
+    if (!d.me) { location.href = '/gm/' + d.gm; return; }
     G.store.set('demo-gm:' + d.me, d.gm);
     location.href = '/p/' + d.me;
   } catch (err) { G.toast(err.message, true); b.disabled = false; b.textContent = label; }

@@ -2,3 +2,5 @@ node_modules/
 .wrangler/
 .dev.vars
 public/_secret/sample/
+# 10/04 の記録は git に入れず、公開のときだけ private/archive_site から隠しパスへ写す（scripts/deploy.sh）
+public/kiroku-*/

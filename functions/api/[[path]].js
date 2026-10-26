@@ -1,17 +1,20 @@
 // API の入口。/api/<名前> を engine.js の処理につなぐ
 import * as E from '../../src/engine.js';
 import { cleanScenario } from '../../src/scenario.js';
-import { tick, demoAction, catchUp, gmMode } from '../../src/bots.js';
+import { tick, demoAction, catchUp, gmMode, seed } from '../../src/bots.js';
 
 const json = (d, status = 200) => new Response(JSON.stringify(d), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 
 const routes = {
   // 状態の取得。v が今と同じなら中身は返さない（読み出しを減らすため）
   async 'GET state'({ env, url }) {
-    let { g, p, gm } = await E.who(env, url.searchParams.get('k'));
+    let { g, p, gm, gmNow } = await E.who(env, url.searchParams.get('k'));
+    // as=gm：GM手帳から。主催者の鍵か、このタームのGMを任された参加者の鍵
+    const asGm = gm || (url.searchParams.get('as') === 'gm' && gmNow);
+    if (url.searchParams.get('as') === 'gm' && !asGm) throw new E.Bad('このタームのGMではありません', 403);
     if (g.demo) { if (await tick(env, g)) g = await E.attach(env, await env.DB.prepare('SELECT * FROM games WHERE id = ?').bind(g.id).first()); }
     if (String(g.ver) === url.searchParams.get('v')) return json({ v: g.ver, now: Date.now(), same: true });
-    return json(gm ? await E.gmState(env, g) : await E.playerState(env, g, p));
+    return json(asGm ? await E.gmState(env, g, gm ? null : p) : await E.playerState(env, g, p));
   },
   async 'POST up'({ env, url, request }) {
     const { g, p, gm } = await E.who(env, url.searchParams.get('k'));
@@ -20,15 +23,15 @@ const routes = {
     return json(await E.upload(env, g, p, url.searchParams.get('kind'), ref == null ? null : Number(ref), await request.arrayBuffer()));
   },
   async 'GET img'({ env, url }) {
-    const { g, p, gm } = await E.who(env, url.searchParams.get('k'));
-    const data = await E.photo(env, g, gm ? null : p, Number(url.searchParams.get('id')));
+    const { g, p, gm, gmNow } = await E.who(env, url.searchParams.get('k'));
+    const data = await E.photo(env, g, gm || gmNow ? null : p, Number(url.searchParams.get('id')));
     return new Response(data instanceof ArrayBuffer ? data : new Uint8Array(data), { headers: { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400' } });
   },
   // 答えの写真：GMと、そのタームの内通者と、結果が出たあとの全員
   async 'GET answer'({ env, url, request }) {
-    const { g, p, gm } = await E.who(env, url.searchParams.get('k'));
+    const { g, p, gm, gmNow } = await E.who(env, url.searchParams.get('k'));
     const t = Number(url.searchParams.get('t')) || g.term;
-    if (!gm) {
+    if (!gm && !(gmNow && t === g.term)) {
       const r = await env.DB.prepare('SELECT role FROM roles WHERE game = ? AND term = ? AND player = ?').bind(g.id, t, p.id).first();
       const done = t < g.term || (t === g.term && ['result', 'end'].includes(g.phase));
       if (!done && !(t === g.term && r?.role === '内通者' && g.phase !== 'setup')) throw new E.Bad('見られません', 403);
@@ -39,8 +42,8 @@ const routes = {
   },
   // お題の見本写真（下見のときに撮ったもの）。GMだけが見られる
   async 'GET sample'({ env, url, request }) {
-    const { g, gm } = await E.who(env, url.searchParams.get('k'));
-    if (!gm) throw new E.Bad('見られません', 403);
+    const { g, gm, gmNow } = await E.who(env, url.searchParams.get('k'));
+    if (!gm && !gmNow) throw new E.Bad('見られません', 403);
     const o = E.termOf(g, Number(url.searchParams.get('t')) || g.term)?.odai.find(x => x.no === Number(url.searchParams.get('no')));
     if (!o?.sample) throw new E.Bad('見本の写真はありません', 404);
     const res = await env.ASSETS.fetch(new URL('/_secret/sample/' + o.sample, request.url));
@@ -49,10 +52,14 @@ const routes = {
   },
   async 'POST act'({ env, request }) {
     const b = await request.json();
-    const { g, p, gm } = await E.who(env, b.k);
-    const A = gm ? {
+    const { g, p, gm, gmNow } = await E.who(env, b.k);
+    const asGm = gm || (b.as === 'gm' && gmNow);
+    // 役職の割り振りは主催者だけ（GMを任された参加者が、これからの役職を見たり変えたりしないように）
+    const ownerOnly = ['role', 'shuffle'];
+    if (asGm && !gm && ownerOnly.includes(b.type)) throw new E.Bad('役職の割り振りは主催者のGM手帳からだけできます', 403);
+    const A = asGm ? {
       // GMデモでは、進める前にコンピューターの確保写真と投票を済ませる
-      phase: async () => { if (g.demo && gmMode(g)) await catchUp(env, g, b.to); return E.phase(env, g, b.to); },
+      phase: async () => { if (g.demo && gmMode(g)) await catchUp(env, g, b.to); await E.phase(env, g, b.to); if (g.demo) await seed(env, g.id); },
       demoShift: () => demoAction(env, g, null, 'demoShift', b),
       judge: () => E.judge(env, g, Number(b.sub), !!b.ok, b.note),
       contact: () => E.contact(env, g, b.role, Number(b.slot), b.player),
@@ -94,7 +101,8 @@ const routes = {
   },
   // デモ：16人のうち1人を自分、残りをコンピューターにする
   async 'POST demo'({ env, request }) {
-    const mode = (await request.json().catch(() => ({}))).mode === 'gm' ? 'gm' : 'player';
+    const want = (await request.json().catch(() => ({}))).mode;
+    const mode = ['player', 'gm', 'tour-player', 'tour-gm', 'try-player', 'try-gm'].includes(want) ? want : 'player';
     const old = await env.DB.prepare('SELECT id FROM games WHERE demo = 1 AND created < ?').bind(Date.now() - 86400000).all();
     for (const r of old.results) await E.deleteGame(env, r.id);
     // 無料の範囲（D1の読み出し 1日500万行）を使い切らないように、デモの数を絞る。
@@ -105,10 +113,12 @@ const routes = {
     if (day.n >= (live.n ? 15 : 45)) throw new E.Bad('今日のデモは満員になりました。明日またお試しください', 429);
     const names = ['アオサギ', 'イタチ', 'ウミネコ', 'オオカミ', 'カワセミ', 'キツネ', 'クジャク', 'コウモリ', 'サソリ', 'シャチ', 'タカ', 'ツバメ', 'ハヤブサ', 'フクロウ', 'ヤマネコ', 'ワシ'];
     // 参加者デモは短く。GMデモは本番と同じ長さで、行動中は時間を飛ばしながら進める
-    const { game, players } = mode === 'gm'
-      ? await E.createGame(env, { title: '台場スパイゲーム（GMデモ）', names, demo: true, me: -1, mode })
-      : await E.createGame(env, { title: '台場スパイゲーム（デモ）', names, demo: true, me: 0, mode, dur: { action: 12, meeting: 3, vote: 2 } });
-    return json({ gm: game.gm, me: mode === 'gm' ? null : players[0].tok });
+    const asGm = mode === 'gm' || mode.endsWith('-gm');
+    const title = { player: 'デモ', gm: 'GMデモ', 'tour-player': '参加者・画面の案内', 'tour-gm': 'GM・画面の案内', 'try-player': '参加者・やってみる', 'try-gm': 'GM・やってみる' }[mode];
+    const { game, players } = asGm
+      ? await E.createGame(env, { title: `台場スパイゲーム（${title}）`, names, demo: true, me: -1, mode })
+      : await E.createGame(env, { title: `台場スパイゲーム（${title}）`, names, demo: true, me: 0, mode, meRole: mode === 'player' ? null : '内通者', dur: mode === 'player' ? { action: 12, meeting: 3, vote: 2 } : undefined });
+    return json({ gm: game.gm, me: asGm ? null : players[0].tok, mode });
   },
 };
 

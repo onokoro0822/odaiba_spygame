@@ -16,6 +16,7 @@ export async function tick(env, g) {
   // 同時に何人も読みに来ても、動かすのは1回だけ
   const last = g.bot_at || g.created;
   if (t - last < 4 * SEC) return false;
+  if (frozen(g)) return false;
   const lock = await env.DB.prepare('UPDATE games SET bot_at = ? WHERE id = ? AND (bot_at IS NULL OR bot_at = ?)').bind(t, g.id, g.bot_at ?? null).run();
   if (!lock.meta.changes) return false;
   // GMデモで時間を飛ばしたときは、そのぶん長めに動く
@@ -23,15 +24,22 @@ export async function tick(env, g) {
   try { return await step(env, g, t, dt); } catch (e) { console.error('bot', e); return false; }
 }
 
-// GMデモ：16人ともコンピューターで、判定・接触・採点・進行はデモを遊ぶ人（GM）がやる
-export const gmMode = g => JSON.parse(g.opts || '{}').mode === 'gm';
+// デモの種類（games.opts.mode）
+//   player       参加者として。ほかの15人とGMはコンピューター、時間がきたら自動で進む（前からあるもの）
+//   gm           GMとして。16人ともコンピューター、時間送りあり（前からあるもの）
+//   tour-player / tour-gm  画面の案内。案内に合わせて場面を作るので、コンピューターは勝手に動かない
+//   try-player  / try-gm   やってみる。課題に沿って自分で操作する。時間では進まない
+export const modeOf = g => JSON.parse(g.opts || '{}').mode || 'player';
+export const gmMode = g => ['gm', 'tour-gm', 'try-gm'].includes(modeOf(g));   // デモを遊ぶ人がGM
+const frozen = g => modeOf(g).startsWith('tour');
+const auto = g => modeOf(g) === 'player';
 
 async function step(env, g, t, dt) {
   const d = E.durations(g), since = (t - (g.phase_at || g.created)) / SEC, gm = gmMode(g);
   const db = (sql, ...a) => env.DB.prepare(sql).bind(...a);
   // ---- 時間がきたら進める（GMの代わり。GMデモでは進めない） ----
-  const next = gm ? null : { brief: ['action', WAIT.brief], action: ['meeting', d.action * 60], meeting: ['vote', d.meeting * 60], vote: ['result', d.vote * 60], result: [g.term < E.CT(g).terms.length ? 'brief' : 'end', WAIT.result] }[g.phase];
-  if (g.phase === 'setup' && !gm) { await E.phase(env, g, 'brief'); return true; }
+  const next = !auto(g) ? null : { brief: ['action', WAIT.brief], action: ['meeting', d.action * 60], meeting: ['vote', d.meeting * 60], vote: ['result', d.vote * 60], result: [g.term < E.CT(g).terms.length ? 'brief' : 'end', WAIT.result] }[g.phase];
+  if (g.phase === 'setup' && auto(g)) { await E.phase(env, g, 'brief'); return true; }
   if (next && since >= next[1]) {
     await catchUp(env, g, next[0]);
     await E.phase(env, g, next[0]);
@@ -87,9 +95,22 @@ async function step(env, g, t, dt) {
         if (chance(0.06 * k, dt) && Math.random() < 0.85) { await E.contact(env, g, role, x.n, r.player); changed = true; }
       }
     }
+    // やってみる（GM）：GMが2枚判定したら、緊急任務を1回出して練習してもらう
+    if (modeOf(g) === 'try-gm') {
+      const judged = (await db("SELECT COUNT(*) AS n FROM subs WHERE game = ? AND term = ? AND kind = 'odai' AND state != 'pending'", g.id, g.term).first()).n;
+      const any = await db('SELECT 1 FROM sabotage WHERE game = ? AND term = ?', g.id, g.term).first();
+      const sp = bots.find(b => b.role === '内通者');
+      if (judged >= 2 && !any && sp) { await db("INSERT INTO rights (game, term, player, source, at) VALUES (?, ?, ?, 'contact', ?)", g.id, g.term, sp.player, t).run(); await E.sabotage(env, g, P[sp.player]); return true; }
+      // 緊急任務が出たら、数秒でそのチームの写真を届ける（練習で待たせない）
+      const z = (await db("SELECT id, team, at FROM sabotage WHERE game = ? AND term = ? AND state = 'active' ORDER BY id LIMIT 1", g.id, g.term).first());
+      if (z && t - z.at > 5 * SEC && !(await db("SELECT 1 FROM subs WHERE game = ? AND kind = 'kinkyu' AND ref = ? AND state = 'pending'", g.id, z.id).first())) {
+        const who = bots.find(b => b.team === z.team && b.role === '公安') || bots.find(b => b.team === z.team);
+        if (who) { await E.upload(env, g, P[who.player], 'kinkyu', z.id, null).catch(() => {}); return true; }
+      }
+    }
     // 妨害：権利を持ったら、しばらくして使う
     const rights = (await db('SELECT DISTINCT player FROM rights WHERE game = ? AND term = ? AND used_at IS NULL', g.id, g.term).all()).results;
-    for (const { player } of rights) if (P[player].bot && left > 60 && chance(0.012 * k, dt)) { try { await E.sabotage(env, g, P[player]); changed = true; } catch { /* 行動が終わった */ } }
+    for (const { player } of !['player', 'gm'].includes(modeOf(g)) ? [] : rights) if (P[player].bot && left > 60 && chance(0.012 * k, dt)) { try { await E.sabotage(env, g, P[player]); changed = true; } catch { /* 行動が終わった */ } }
     // 張り込み：内通者がときどき撮る
     const H = (await db('SELECT id, team FROM harikomi WHERE game = ? AND term = ? AND done IS NULL', g.id, g.term).all()).results;
     for (const r of bots.filter(b => b.role === '内通者')) if (H.length && chance(0.004 * k, dt) && !pend.some(s => s.kind === 'harikomi')) await up(r, 'harikomi', pick(H).id);
@@ -124,7 +145,7 @@ export async function catchUp(env, g, next) {
     const voted = new Set((await db('SELECT player FROM votes WHERE game = ? AND term = ?', g.id, g.term).all()).results.map(v => v.player));
     const g2 = g.phase === 'vote' || g.phase === 'meeting' ? g : { ...g, phase: 'vote' };
     for (const r of roles) if (P[r.player].bot && !voted.has(r.player)) await botVote(env, g2, P[r.player], r, roles);
-    if (!gmMode(g)) await scoreAll(env, g);
+    if (!gmMode(g) || modeOf(g) === 'tour-gm') await scoreAll(env, g);
   }
 }
 async function botVote(env, g, p, r, roles) {
@@ -156,6 +177,7 @@ export async function demoAction(env, g, p, type, b) {
     if (!next) throw new E.Bad('ゲームは終わっています');
     await catchUp(env, g, next);
     await E.phase(env, g, next);
+    await seed(env, g.id);
     return {};
   }
   // GMデモ：行動中の時間を進める（行動の開始を前にずらす）
@@ -180,4 +202,53 @@ export async function demoAction(env, g, p, type, b) {
     return {};
   }
   throw new E.Bad('この操作はできません', 403);
+}
+
+// 画面の案内（tour）：場面が変わったときに、説明に使う場面を一度に作る
+export async function seed(env, gid) {
+  const g = await E.attach(env, await env.DB.prepare('SELECT * FROM games WHERE id = ?').bind(gid).first());
+  const m = modeOf(g);
+  if (g.phase !== 'action') return;
+  if (m === 'try-gm') {   // やってみる（GM）：判定の練習ができるように、すぐ2枚届ける
+    const r = (await env.DB.prepare("SELECT player FROM roles WHERE game = ? AND term = ? AND role = '公安' LIMIT 2").bind(g.id, g.term).all()).results;
+    const P2 = Object.fromEntries((await env.DB.prepare('SELECT * FROM players WHERE game = ?').bind(g.id).all()).results.map(p => [p.id, p]));
+    for (const [i, x] of r.entries()) await E.upload(env, g, P2[x.player], 'odai', i + 1, null).catch(() => {});
+    return;
+  }
+  if (!m.startsWith('tour')) return;
+  const db = (sql, ...a) => env.DB.prepare(sql).bind(...a);
+  const players = (await db('SELECT * FROM players WHERE game = ?', g.id).all()).results;
+  const P = Object.fromEntries(players.map(p => [p.id, p]));
+  const roles = (await db('SELECT * FROM roles WHERE game = ? AND term = ? AND role IS NOT NULL', g.id, g.term).all()).results;
+  const human = players.find(p => !p.bot);
+  const by = (team, role) => roles.find(r => r.team === team && r.role === role)?.player;
+  const sub = async (pid, kind, ref) => (await E.upload(env, g, P[pid], kind, ref, null)).id;
+  const ok = async id => { try { await E.judge(env, g, id, true); } catch { /* なし */ } };
+  if (m === 'tour-player' && human) {
+    const me = roles.find(r => r.player === human.id), mate = roles.find(r => r.team === me.team && r.player !== human.id), other = roles.find(r => r.team !== me.team);
+    await ok(await sub(human.id, 'odai', 1));               // 自分が獲得 → 1番目の手掛かり
+    await ok(await sub(mate.player, 'odai', 2));            // チームの仲間が獲得
+    await ok(await sub(other.player, 'odai', 3));           // 別のチームが獲得
+    await sub(human.id, 'odai', 4);                         // 自分の写真が判定待ち
+    await E.contact(env, g, me.role, 1, human.id).catch(() => {});
+    const sp = by(other.team, '内通者');                     // 別のチームに緊急任務
+    await db("INSERT INTO rights (game, term, player, source, at) VALUES (?, ?, ?, 'contact', ?)", g.id, g.term, sp, E.now()).run();
+    await E.sabotage(env, g, P[sp]);
+  }
+  if (m === 'tour-gm') {
+    // 接触の1回目が始まる時刻まで進めてから、判定待ちの写真・張り込み・緊急任務を用意する
+    const T = E.termOf(g, g.term), k = E.durations(g).action / 60, first = Math.min(...Object.values(T.contacts).flatMap(c => c.slots.map(x => x.from)));
+    const ms = Math.round(first * k * 60000) + 30000;
+    await db('UPDATE games SET action_at = action_at - ?, phase_at = phase_at - ? WHERE id = ?', ms, ms, g.id).run();
+    g.action_at -= ms; g.phase_at -= ms;
+    await sub(by('A', '公安'), 'odai', 1);
+    await sub(by('B', '公安'), 'odai', 1);                   // 同じお題に2チーム：先に投稿した方から判定する
+    await sub(by('C', '密使'), 'odai', 2);
+    const h = await db('SELECT id FROM harikomi WHERE game = ? AND term = ? LIMIT 1', g.id, g.term).first();
+    if (h) await sub(by('A', '内通者'), 'harikomi', h.id);
+    const sp = by('C', '内通者');
+    await db("INSERT INTO rights (game, term, player, source, at) VALUES (?, ?, ?, 'contact', ?)", g.id, g.term, sp, E.now()).run();
+    const z = await E.sabotage(env, g, P[sp]);
+    await sub(by('C', '公安'), 'kinkyu', z.id);
+  }
 }

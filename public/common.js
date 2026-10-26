@@ -26,7 +26,9 @@ G.api = async (path, opt = {}) => {
   if (!r.ok) throw new Error(d.error || '通信に失敗しました');
   return d;
 };
-G.act = (type, x = {}) => G.api('act', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: G.key, type, ...x }) });
+// GM手帳は as=gm を付ける（このタームのGMを任された参加者は、自分の鍵のままGM手帳を開く）
+G.asGm = location.pathname.startsWith('/gm/');
+G.act = (type, x = {}) => G.api('act', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ k: G.key, type, ...(G.asGm ? { as: 'gm' } : {}), ...x }) });
 
 // サーバーとの時計のずれを直して、残り時間を出す
 G.skew = 0;
@@ -39,12 +41,12 @@ G.poll = (onState, every = 4000) => {
     clearTimeout(timer);
     if (busy) return; busy = true;
     try {
-      const d = await G.api(`state?k=${encodeURIComponent(G.key)}&v=${v}`);
+      const d = await G.api(`state?k=${encodeURIComponent(G.key)}&v=${v}${G.asGm ? '&as=gm' : ''}`);
       G.skew = d.now - Date.now();
-      if (!d.same) { v = d.v; onState(d); }
+      if (!d.same) { v = d.v; onState(d); G.S = d; G.afterState?.(d); }
       G.offline(false);
     } catch (e) {
-      if (/見つかりません/.test(e.message)) { onState({ error: e.message }); busy = false; return; }
+      if (/見つかりません|GMではありません/.test(e.message)) { onState({ error: e.message }); busy = false; return; }
       G.offline(true);
     }
     busy = false;

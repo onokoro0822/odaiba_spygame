@@ -1,7 +1,7 @@
 // 手元のサーバー（npm run dev）に対して、1ターム分を最初から最後まで通してみる
 import { readFileSync } from 'node:fs';
 const B = process.env.BASE || 'http://localhost:8790';
-const JPG = readFileSync(new URL('../public/archive/img/term1.jpg', import.meta.url));
+const JPG = readFileSync(new URL('../public/_secret/term1.jpg', import.meta.url));
 let fails = 0;
 const ok = (c, m) => { console.log((c ? '  ok ' : '  NG ') + m); if (!c) fails++; };
 async function api(method, path, body, raw) {
