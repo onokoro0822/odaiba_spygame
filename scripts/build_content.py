@@ -1,4 +1,5 @@
-"""../private/archive_site/data.json（10/04 の記録）から、ゲームで使う中身（src/content.json）を作る。
+"""../private/archive_site/data.json（10/04 の記録）から、本番用のシナリオ（../private/content_1004.json、公開しない）を作る。
+データベースへは ../private/seed_main.sql で入れる。デモ用の架空のシナリオは scripts/demo_content.py。
 答えの写真は public/_secret/ にコピーする（関数からだけ読める場所）。"""
 import json, re, shutil, os, sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -41,7 +42,7 @@ if hari:
 
 # 取り込み済みの見本写真（import_samples.py で付けた "sample"）は残す
 try:
-    old = json.load(open(os.path.join(ROOT, 'src/content.json')))
+    old = json.load(open(os.path.join(os.path.dirname(ROOT), 'private/content_1004.json')))
     for T, OT in zip(terms, old['terms']):
         for o, oo in zip(T['odai'], OT['odai']):
             if oo.get('sample'): o['sample'] = oo['sample']
@@ -52,7 +53,7 @@ out = {'title': '台場スパイゲーム', 'subtitle': 'お台場の3つのモ�
        'durations': {'action': 60, 'meeting': 10, 'vote': 5}, 'openCount': 3,
        'harikomiPerTeam': 5, 'harikomiMax': 3, 'sabotageMax': 4,
        'harikomiActions': actions, 'terms': terms}
-json.dump(out, open(os.path.join(ROOT, 'src/content.json'), 'w'), ensure_ascii=False, indent=1)
+json.dump(out, open(os.path.join(os.path.dirname(ROOT), 'private/content_1004.json'), 'w'), ensure_ascii=False, indent=1)  # 本番用（公開しない）
 os.makedirs(os.path.join(ROOT, 'public/_secret'), exist_ok=True)
 for t in (1, 2, 3):
     shutil.copy(os.path.join(os.path.dirname(ROOT), f'private/archive_site/img/term{t}.jpg'), os.path.join(ROOT, f'public/_secret/term{t}.jpg'))

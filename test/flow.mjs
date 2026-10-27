@@ -108,7 +108,7 @@ for (const [pid, r0] of Object.entries(R)) {
 ok((await act(tok[a1], 'vote', { s: c1 })).status === 400, '別のチームの人には投票できない');
 await act(GM, 'phase', { to: 'vote' });
 ok((await act(GM, 'phase', { to: 'result' })).status === 400, '確保写真の採点が終わるまで結果に進めない');
-await act(GM, 'kakuho', { team: 'A', checks: [1, 2, 3, 20] }); await act(GM, 'kakuho', { team: 'B', checks: [1] });
+await act(GM, 'kakuho', { team: 'A', checks: [1, 2, 3, 4] }); await act(GM, 'kakuho', { team: 'B', checks: [1] });
 r = await act(GM, 'phase', { to: 'result' }); ok(r.status === 200, '採点すると結果に進める');
 pa = await st(tok[a1]);
 const T1 = pa.res.terms[0];

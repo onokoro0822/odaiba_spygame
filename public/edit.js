@@ -29,6 +29,7 @@ function render() {
   const T = [['all', '全体'], ...D.terms.map((x, i) => [String(i), `ターム${i + 1}`])];
   $('#tabs').innerHTML = T.map(([id, l]) => `<button type="button" data-tab="${id}"${id === tab ? ' aria-current="page"' : ''}>${l}</button>`).join('');
   $('#main').innerHTML = tab === 'all' ? all() : term(Number(tab));
+  loadThumbs();
 }
 function all() {
   return `<h1>全体</h1><div class="card"><label class="f">ゲームの名前</label>${inp('title', D.title)}<label class="f">ひとことの説明</label>${inp('subtitle', D.subtitle || '')}</div>
@@ -40,12 +41,14 @@ function term(i) {
   const T = D.terms[i], P = `terms.${i}`;
   let h = `<h1>ターム${i + 1}　<span class="sub">${esc(T.mall)}</span></h1>`;
   h += `<div class="card"><div class="mini"><div><label class="f">モールの名前</label>${inp(`${P}.mall`, T.mall)}</div><div><label class="f">緊急任務で使う階（カンマ区切り）</label>${inp(`${P}.floors`, (T.floors || []).join(','))}</div></div>
-    <label class="f">答えの写真の撮影場所（結果発表と内通者に出る）</label>${area(`${P}.answer`, T.answer, 2)}</div>`;
+    <label class="f">答えの写真の撮影場所（結果発表と内通者に出る）</label>${area(`${P}.answer`, T.answer, 2)}
+    <label class="f">答えの写真</label>${photoField(`${P}.photo`, T.photo, '答えの写真')}</div>`;
   h += `<h2>お題 <span class="sub">${T.odai.length}個。上から順に${D.openCount || 3}個ずつ公開されます</span></h2>`;
   h += T.odai.map((o, j) => `<div class="card item"><div class="no">${j + 1}</div><div>
     <div class="mini"><div><label class="f">お題の名前</label>${inp(`${P}.odai.${j}.title`, o.title)}</div><div><label class="f">タグ（カンマ区切り。屋外、お金：100円 など）</label>${inp(`${P}.odai.${j}.tags`, (o.tags || []).join(','))}</div></div>
     <label class="f">指令</label>${area(`${P}.odai.${j}.order`, o.order, 3)}
     <label class="f">条件（GMが判定で見るところ）</label>${area(`${P}.odai.${j}.cond`, o.cond, 2)}
+    <label class="f">見本写真（GMの判定画面に出る）</label>${photoField(`${P}.odai.${j}.sample`, o.sample ? (o.sample.startsWith('db:') ? o.sample : 'sample/' + o.sample) : '', '見本写真', true)}
     ${ops(`${P}.odai`, j, T.odai.length)}</div></div>`).join('');
   h += `<button class="btn ghost" type="button" data-add="${P}.odai">お題を足す</button>`;
   h += `<h2>手掛かりと割符 <span class="sub">${T.rewards.length}個。お題を獲得した順番に、上から1つずつ届きます</span></h2>`;
@@ -61,6 +64,34 @@ function term(i) {
     <div class="mini"><div><label class="f">合言葉</label>${inp(`${P}.contacts.${r}.pw`, c.pw)}</div></div>
     ${c.slots.map((x, j) => `<div class="mini" style="margin-top:6px;grid-template-columns:90px 90px 1fr"><div><label class="f">${j + 1}回目 開始</label>${inp(`${P}.contacts.${r}.slots.${j}.from`, x.from, 'inputmode="numeric"')}</div><div><label class="f">終わり</label>${inp(`${P}.contacts.${r}.slots.${j}.to`, x.to, 'inputmode="numeric"')}</div><div><label class="f">場所</label>${inp(`${P}.contacts.${r}.slots.${j}.place`, x.place)}</div></div>`).join('')}</div>`; }).join('');
   return h;
+}
+
+// ---------- 写真 ----------
+// ref：'db:<id>'（ここから上げたもの）か、public/_secret/ の下のファイル名
+const thumbs = new Map();
+function photoField(path, ref, label, removable) {
+  return `<div class="row" style="align-items:flex-start;gap:10px">${ref ? `<img data-ref="${esc(ref)}" alt="${esc(label)}" style="width:160px;aspect-ratio:4/3;object-fit:cover;border-radius:6px;background:var(--line)">` : `<span class="sub" style="width:160px">まだありません</span>`}
+    <span class="row"><button class="btn ghost small" type="button" data-photo="${path}">${ref ? '写真を変える' : '写真を上げる'}</button>${removable && ref ? `<button class="btn ng small" type="button" data-unphoto="${path}">外す</button>` : ''}</span></div>`;
+}
+async function loadThumbs() {
+  for (const img of document.querySelectorAll('img[data-ref]')) {
+    const ref = img.dataset.ref;
+    if (!thumbs.has(ref)) {
+      thumbs.set(ref, fetch('/api/scenario', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key, op: 'photo', ref }) })
+        .then(r => r.ok ? r.blob() : null).then(b => b && URL.createObjectURL(b)));
+    }
+    const u = await thumbs.get(ref); if (u) img.src = u;
+  }
+}
+async function uploadPhoto(path) {
+  const f = await G.pickPhoto(); if (!f) return;
+  G.toast('上げています…');
+  try {
+    const b = await G.shrink(f, 1600, 0.82);
+    const r = await fetch(`/api/scenario-photo?key=${encodeURIComponent(key)}`, { method: 'POST', headers: { 'content-type': 'image/jpeg' }, body: b });
+    const d = await r.json(); if (!r.ok) throw new Error(d.error);
+    setPath(path, d.ref); changed(); render(); G.toast('写真を入れました。保存すると使われます');
+  } catch (e) { G.toast(e.message || '上げられませんでした', true); }
 }
 
 // ---------- 値の読み書き ----------
@@ -89,6 +120,8 @@ document.addEventListener('click', async e => {
   const b = e.target.closest('button'); if (!b) return;
   const d = b.dataset;
   if (d.tab) { tab = d.tab; render(); window.scrollTo(0, 0); return; }
+  if (d.photo) { uploadPhoto(d.photo); return; }
+  if (d.unphoto) { setPath(d.unphoto, ''); changed(); render(); return; }
   if (d.add) {
     const L = getList(d.add);
     L.push(d.add.endsWith('odai') ? { title: '調査写真の撮影', order: '', cond: '', tags: [] } : d.add.endsWith('rewards') ? { kind: '手掛かり', text: '' } : { item: '', bep: false });

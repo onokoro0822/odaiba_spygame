@@ -29,7 +29,7 @@ for d, _, fs in os.walk(src):
             files[stem.upper()] = os.path.join(d, f)
 
 mapping = json.load(open(os.path.join(ROOT, 'scripts/sample_photos.json')))
-content_path = os.path.join(ROOT, 'src/content.json')
+content_path = os.path.join(os.path.dirname(ROOT), 'private/content_1004.json')  # 本番用のシナリオ（公開しない）
 C = json.load(open(content_path))
 out_dir = os.path.join(ROOT, 'public/_secret/sample')
 review = os.path.join(os.path.dirname(ROOT), 'private/shitami/review')

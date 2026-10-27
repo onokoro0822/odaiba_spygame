@@ -22,8 +22,9 @@ const run = (env, sql, ...a) => env.DB.prepare(sql).bind(...a).run();
 const st = (env, sql, ...a) => env.DB.prepare(sql).bind(...a);
 const bump = (env, g) => st(env, 'UPDATE games SET ver = ver + 1 WHERE id = ?', g.id);
 
-// シナリオ（お題・手掛かり・接触の場所など）はゲームごとに持つ。作ったときの「編集中のシナリオ」を写して使うので、
-// あとで編集しても進行中のゲームは変わらない。g.C がなければ同梱の content.json
+// シナリオ（お題・手掛かり・接触の場所など）はゲームごとに持つ。作ったときのシナリオを写して使うので、
+// あとで編集しても進行中のゲームは変わらない。同梱の content.json はデモ用の架空のシナリオで、
+// 本番のシナリオはデータベース（scen 表の 'main'）にだけ置く
 export const DEFAULT = C;
 export const CT = g => g?.C || C;
 export const termOf = (g, t) => CT(g).terms[t - 1];
@@ -39,8 +40,10 @@ export async function attach(env, g) {
   return g;
 }
 // 編集中のシナリオ（なければ同梱のもの）
+// 'base' は最初に入れた本番のシナリオ（10/04 のもの）。「最初の内容に戻す」はここへ戻す
 export async function mainScenario(env) {
-  const r = await env.DB.prepare("SELECT data, updated FROM scen WHERE id = 'main'").first();
+  const r = await env.DB.prepare("SELECT data, updated FROM scen WHERE id = 'main'").first()
+    || await env.DB.prepare("SELECT data, NULL AS updated FROM scen WHERE id = 'base'").first();
   return r ? { data: JSON.parse(r.data), updated: r.updated } : { data: C, updated: null };
 }
 const opts = g => JSON.parse(g.opts || '{}');
@@ -66,7 +69,8 @@ export async function createGame(env, { title, names, demo = false, dur, me = 0,
   names = names.map(s => s.trim()).filter(Boolean);
   if (names.length < 12 || names.length > 21) throw new Bad('参加者は12〜21人にしてください');
   if (new Set(names).size !== names.length) throw new Bad('同じ名前が2回入っています');
-  const { data } = await mainScenario(env);
+  // デモはいつも同梱の架空シナリオ（本番のお題を見せないため）。本番は編集中のシナリオ
+  const { data } = demo ? { data: C } : await mainScenario(env);
   const id = token(10);
   const g = { id, gm: token(), title: title || data.title, demo: demo ? 1 : 0, opts: JSON.stringify({ ...(dur ? { dur } : {}), ...(mode ? { mode } : {}) }), created: now(), scen: 'g:' + id, C: data };
   const players = names.map((name, i) => ({ id: token(8), tok: token(), name, seat: i, bot: demo && i !== me ? 1 : 0 }));

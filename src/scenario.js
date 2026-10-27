@@ -27,7 +27,7 @@ export function cleanScenario(d, base) {
         if (!contacts[r].pw) bad.push(`${where}：${r}の合言葉が空です`);
       }
       const floors = String(Array.isArray(T.floors) ? T.floors.join(',') : T.floors || '').split(/[,、\s]+/).map(x => x.trim()).filter(Boolean);
-      return { t, mall: str(T.mall, 60) || where, floors: floors.length ? floors : ['1'], answer: str(T.answer, 500), photo: base.terms[i]?.photo || `term${t}.jpg`,
+      return { t, mall: str(T.mall, 60) || where, floors: floors.length ? floors : ['1'], answer: str(T.answer, 500), photo: str(T.photo, 120) || base.terms[i]?.photo || `term${t}.jpg`,
         bep: checks.filter(c => c.bep).map(c => c.item), odai, rewards, checks, contacts };
     }),
   };

@@ -5,6 +5,19 @@ import { tick, demoAction, catchUp, gmMode, seed } from '../../src/bots.js';
 
 const json = (d, status = 200) => new Response(JSON.stringify(d), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 
+// シナリオの写真を読む。'db:<id>' は編集画面から上げたもの（データベース）、それ以外は public/_secret/ の下のファイル
+async function scenPhoto(env, request, ref) {
+  if (!ref || ref.includes('..')) return null;
+  if (ref.startsWith('db:')) {
+    const r = await env.DB.prepare("SELECT data FROM photos WHERE id = ? AND game = 'scen'").bind(Number(ref.slice(3))).first();
+    return r ? (r.data instanceof ArrayBuffer ? r.data : new Uint8Array(r.data)) : null;
+  }
+  const res = await env.ASSETS.fetch(new URL('/_secret/' + ref, request.url));
+  // 無いファイルを頼むとトップページが返ってくるので、画像のときだけ使う
+  return res.ok && (res.headers.get('content-type') || '').startsWith('image/') ? res.body : null;
+}
+const jpeg = body => new Response(body, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400' } });
+
 const routes = {
   // 状態の取得。v が今と同じなら中身は返さない（読み出しを減らすため）
   async 'GET state'({ env, url }) {
@@ -37,8 +50,9 @@ const routes = {
       if (!done && !(t === g.term && r?.role === '内通者' && g.phase !== 'setup')) throw new E.Bad('見られません', 403);
     }
     const T = E.termOf(g, t); if (!T) throw new E.Bad('ありません', 404);
-    const res = await env.ASSETS.fetch(new URL('/_secret/' + T.photo, request.url));
-    return new Response(res.body, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400' } });
+    const body = await scenPhoto(env, request, T.photo);
+    if (!body) throw new E.Bad('答えの写真がありません', 404);
+    return jpeg(body);
   },
   // お題の見本写真（下見のときに撮ったもの）。GMだけが見られる
   async 'GET sample'({ env, url, request }) {
@@ -46,11 +60,10 @@ const routes = {
     if (!gm && !gmNow) throw new E.Bad('見られません', 403);
     const o = E.termOf(g, Number(url.searchParams.get('t')) || g.term)?.odai.find(x => x.no === Number(url.searchParams.get('no')));
     // デモでは本物の下見写真は出さず、作り物の写真（scripts/gen_demo_photos.py）を使う
-    const file = g.demo ? o?.demo && '/_secret/demo/' + o.demo : o?.sample && '/_secret/sample/' + o.sample;
-    if (!file) throw new E.Bad('見本の写真はありません', 404);
-    const res = await env.ASSETS.fetch(new URL(file, request.url));
-    if (!res.ok) throw new E.Bad('見本の写真はありません', 404);
-    return new Response(res.body, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'private, max-age=86400' } });
+    const ref = g.demo ? o?.demo && 'demo/' + o.demo : o?.sample && (o.sample.startsWith('db:') ? o.sample : 'sample/' + o.sample);
+    const body = await scenPhoto(env, request, ref);
+    if (!body) throw new E.Bad('見本の写真はありません', 404);
+    return jpeg(body);
   },
   async 'POST act'({ env, request }) {
     const b = await request.json();
@@ -84,7 +97,9 @@ const routes = {
     const b = await request.json();
     if (!env.ADMIN_KEY || b.key !== env.ADMIN_KEY) throw new E.Bad('主催者の鍵が違います', 403);
     if (b.op === 'get') { const m = await E.mainScenario(env); return json({ ...m, edited: m.updated != null }); }
-    if (b.op === 'reset') { await env.DB.prepare("DELETE FROM scen WHERE id = 'main'").run(); return json({ ok: true }); }
+    if (b.op === 'reset') { await env.DB.prepare("DELETE FROM scen WHERE id = 'main'").run(); return json({ ok: true }); }   // 'base'（10/04）に戻る
+    // 写真を見る（編集画面のサムネイル用）
+    if (b.op === 'photo') { const body = await scenPhoto(env, request, b.ref); if (!body) throw new E.Bad('写真がありません', 404); return jpeg(body); }
     if (b.op === 'save') {
       let data;
       try { data = cleanScenario(b.data, E.DEFAULT); } catch (e) { throw new E.Bad(e.message); }
@@ -93,6 +108,14 @@ const routes = {
       return json({ ok: true, updated: t, data });
     }
     throw new E.Bad('この操作はできません');
+  },
+  // シナリオの写真を上げる（答えの写真・見本写真）。データベースに置き、'db:<id>' を返す
+  async 'POST scenario-photo'({ env, url, request }) {
+    if (!env.ADMIN_KEY || url.searchParams.get('key') !== env.ADMIN_KEY) throw new E.Bad('主催者の鍵が違います', 403);
+    const data = await request.arrayBuffer();
+    if (!data.byteLength || data.byteLength > 1_900_000) throw new E.Bad('写真が大きすぎます');
+    const r = await env.DB.prepare("INSERT INTO photos (game, data) VALUES ('scen', ?)").bind(data).run();
+    return json({ ref: 'db:' + r.meta.last_row_id });
   },
   // 本番のゲームを作る（主催者の鍵が要る）
   async 'POST new'({ env, request }) {
